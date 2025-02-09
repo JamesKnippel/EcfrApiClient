@@ -185,7 +185,7 @@ public class EcfrClient : IEcfrClient
                     {
                         Date = currentDate,
                         WordCount = wordCount,
-                        DaysSinceLastSnapshot = previousDate.HasValue ? (int)(currentDate - previousDate.Value).TotalDays : 0,
+                        DaysSinceLastSnapshot = previousDate.HasValue ? intervalDays : 0,
                         WordsAddedSinceLastSnapshot = previousWordCount.HasValue ? wordCount - previousWordCount.Value : 0
                     };
 
@@ -203,7 +203,7 @@ public class EcfrClient : IEcfrClient
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, $"Failed to get word count for Title {title.Number} at {currentDate:yyyy-MM-dd}");
+                    _logger?.LogWarning(ex, $"Failed to get word count for Title {title.Number} at {currentDate:yyyy-MM-dd}");
                 }
 
                 currentDate = currentDate.AddDays(intervalDays);
@@ -221,7 +221,7 @@ public class EcfrClient : IEcfrClient
                     {
                         Date = endDate,
                         WordCount = wordCount,
-                        DaysSinceLastSnapshot = (int)(endDate - previousDate.Value).TotalDays,
+                        DaysSinceLastSnapshot = intervalDays,
                         WordsAddedSinceLastSnapshot = previousWordCount.HasValue ? wordCount - previousWordCount.Value : 0
                     };
 
@@ -236,7 +236,7 @@ public class EcfrClient : IEcfrClient
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, $"Failed to get word count for Title {title.Number} at {endDate:yyyy-MM-dd}");
+                    _logger?.LogWarning(ex, $"Failed to get word count for Title {title.Number} at {endDate:yyyy-MM-dd}");
                 }
             }
 
@@ -297,8 +297,9 @@ public class EcfrClient : IEcfrClient
         
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/xml"));
         
-        var response = await _httpClient.SendAsync(request);
+        var response = await _httpClient.GetAsync(request.RequestUri);
         response.EnsureSuccessStatusCode();
+        
         return await response.Content.ReadAsStringAsync();
     }
 }
