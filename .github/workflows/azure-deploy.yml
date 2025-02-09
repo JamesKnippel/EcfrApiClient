@@ -110,6 +110,9 @@ jobs:
     needs: [build-client, build-api]
     runs-on: ubuntu-latest
     if: ${{ needs.build-client.outputs.client_changed == 'true' || needs.build-api.outputs.api_changed == 'true' }}
+    outputs:
+      api_image: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.API_IMAGE_NAME }}:${{ github.sha }}
+      client_image: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.CLIENT_IMAGE_NAME }}:${{ github.sha }}
     steps:
     - uses: actions/checkout@v3
 
@@ -149,9 +152,7 @@ jobs:
   deploy:
     needs: build-and-push-images
     runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-    
+    steps:    
     - name: Login to Azure
       uses: azure/login@v1
       with:
@@ -161,17 +162,14 @@ jobs:
       if: ${{ github.event_name == 'push' || github.event.inputs.deploy_api == 'true' }}
       uses: azure/container-apps-deploy-action@v1
       with:
-        appSourcePath: ${{ github.workspace }}
         acrName: ${{ env.REGISTRY_NAME }}
-        acrUsername: ${{ secrets.REGISTRY_USERNAME }}
-        acrPassword: ${{ secrets.REGISTRY_PASSWORD }}
         containerAppName: ${{ env.AZURE_WEBAPP_NAME }}-api
         resourceGroup: ${{ secrets.AZURE_RESOURCE_GROUP }}
         containerAppEnvironment: ecfr-env
         targetPort: 80
         ingress: external
         location: eastus
-        image: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.API_IMAGE_NAME }}:${{ github.sha }}
+        image: ${{ needs.build-and-push-images.outputs.api_image }}
         cpu: 0.5
         memory: 1Gi
         minReplicas: 1
@@ -184,17 +182,14 @@ jobs:
       if: ${{ github.event_name == 'push' || github.event.inputs.deploy_client == 'true' }}
       uses: azure/container-apps-deploy-action@v1
       with:
-        appSourcePath: ${{ github.workspace }}/ecfr-client
         acrName: ${{ env.REGISTRY_NAME }}
-        acrUsername: ${{ secrets.REGISTRY_USERNAME }}
-        acrPassword: ${{ secrets.REGISTRY_PASSWORD }}
         containerAppName: ${{ env.AZURE_WEBAPP_NAME }}-client
         resourceGroup: ${{ secrets.AZURE_RESOURCE_GROUP }}
         containerAppEnvironment: ecfr-env
         targetPort: 80
         ingress: external
         location: eastus
-        image: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.CLIENT_IMAGE_NAME }}:${{ github.sha }}
+        image: ${{ needs.build-and-push-images.outputs.client_image }}
         cpu: 0.5
         memory: 1Gi
         minReplicas: 1
