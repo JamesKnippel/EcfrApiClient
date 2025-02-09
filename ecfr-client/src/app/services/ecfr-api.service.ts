@@ -67,8 +67,8 @@ export interface TitleWordCountHistory {
 export interface AgencyWordCountHistory {
   agency: Agency;
   titleHistories: TitleWordCountHistory[];
-  startDate: string;
-  endDate: string;
+  startDate: string;  
+  endDate: string;    
   totalWordsAdded: number;
   averageWordsPerDay: number;
 }
@@ -157,40 +157,28 @@ export class EcfrApiService {
     return this.cache.get(cacheKey)!;
   }
 
-  getAgencyWordCountHistory(
-    slug: string, 
-    startDate?: Date, 
-    endDate?: Date, 
-    intervalDays: number = 90
-  ): Observable<AgencyWordCountHistory> {
-    const cacheKey = `history_${slug}_${startDate?.toISOString()}_${endDate?.toISOString()}_${intervalDays}`;
-    if (!this.cache.has(cacheKey)) {
-      let url = `${this.baseUrl}/agencies/${slug}/word-count-history`;
-      const params: string[] = [];
-      
-      if (startDate) {
-        params.push(`startDate=${startDate.toISOString()}`);
-      }
-      if (endDate) {
-        params.push(`endDate=${endDate.toISOString()}`);
-      }
-      if (intervalDays !== 90) {
-        params.push(`intervalDays=${intervalDays}`);
-      }
-      
-      if (params.length > 0) {
-        url += '?' + params.join('&');
-      }
-      
-      const request = this.http.get<AgencyWordCountHistory>(url).pipe(
-        shareReplay(1),
-        catchError(error => {
-          this.cache.delete(cacheKey);
-          throw error;
-        })
-      );
-      this.cache.set(cacheKey, request);
+  getAgencyWordCountHistory(slug: string, startDate?: Date, endDate?: Date): Observable<AgencyWordCountHistory> {
+    let url = `${this.baseUrl}/agencies/${slug}/word-count-history`;
+    const params = new URLSearchParams();
+    
+    if (startDate) {
+      params.append('startDate', startDate.toISOString());
     }
-    return this.cache.get(cacheKey)!;
+    if (endDate) {
+      params.append('endDate', endDate.toISOString());
+    }
+    
+    const queryString = params.toString();
+    if (queryString) {
+      url += '?' + queryString;
+    }
+
+    return this.http.get<AgencyWordCountHistory>(url).pipe(
+      map(history => ({
+        ...history,
+        startDate: history.startDate,  
+        endDate: history.endDate       
+      }))
+    );
   }
 }

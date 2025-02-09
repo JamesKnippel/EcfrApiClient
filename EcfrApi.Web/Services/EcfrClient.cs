@@ -87,14 +87,32 @@ public class EcfrClient : IEcfrClient
         var agency = await GetAgencyBySlugAsync(slug);
         var allTitles = await GetTitlesAsync();
         
-        var agencyTitleNumbers = agency.CfrReferences.Select(r => r.Title).Distinct().ToList();
-        var agencyTitles = allTitles.Titles.Where(t => agencyTitleNumbers.Contains(t.Number)).ToList();
+        // Get distinct title numbers from agency and all its children
+        var allTitleNumbers = new HashSet<int>();
+        CollectTitleNumbers(agency, allTitleNumbers);
+        
+        var agencyTitles = allTitles.Titles
+            .Where(t => allTitleNumbers.Contains(t.Number))
+            .ToList();
         
         return new AgencyTitlesResult
         {
             Agency = agency,
             Titles = agencyTitles
         };
+    }
+
+    private void CollectTitleNumbers(Agency agency, HashSet<int> titleNumbers)
+    {
+        foreach (var reference in agency.CfrReferences)
+        {
+            titleNumbers.Add(reference.Title);
+        }
+
+        foreach (var child in agency.Children)
+        {
+            CollectTitleNumbers(child, titleNumbers);
+        }
     }
 
     public async Task<AgencyTitlesResult> GetAgencyTitlesWithWordCountAsync(string slug)
@@ -128,13 +146,10 @@ public class EcfrClient : IEcfrClient
             throw new ArgumentException("Start date must be before end date");
         }
 
-        var agency = await GetAgencyBySlugAsync(slug);
-        if (agency == null)
-        {
-            throw new ArgumentException($"No agency found with slug '{slug}'");
-        }
+        var result = await GetAgencyTitlesAsync(slug);
+        var agency = result.Agency;
+        var titles = result.Titles;  
 
-        var titles = await GetAgencyTitlesAsync(slug);
         var history = new AgencyWordCountHistory
         {
             Agency = agency,
@@ -143,9 +158,9 @@ public class EcfrClient : IEcfrClient
             EndDate = endDate
         };
 
-        foreach (var title in titles.Titles)
+        foreach (var title in titles)
         {
-            _logger.LogInformation($"Processing history for Title {title.Number}");
+            _logger?.LogInformation($"Processing history for Title {title.Number}");
 
             var titleHistory = new TitleWordCountHistory
             {
@@ -181,7 +196,7 @@ public class EcfrClient : IEcfrClient
                     }
 
                     titleHistory.WordCounts.Add(snapshot);
-                    _logger.LogInformation($"Title {title.Number} at {currentDate:yyyy-MM-dd}: {wordCount:N0} words");
+                    _logger?.LogInformation($"Title {title.Number} at {currentDate:yyyy-MM-dd}: {wordCount:N0} words");
 
                     previousDate = currentDate;
                     previousWordCount = wordCount;
@@ -217,7 +232,7 @@ public class EcfrClient : IEcfrClient
                     }
 
                     titleHistory.WordCounts.Add(snapshot);
-                    _logger.LogInformation($"Title {title.Number} at {endDate:yyyy-MM-dd}: {wordCount:N0} words");
+                    _logger?.LogInformation($"Title {title.Number} at {endDate:yyyy-MM-dd}: {wordCount:N0} words");
                 }
                 catch (Exception ex)
                 {
@@ -231,8 +246,8 @@ public class EcfrClient : IEcfrClient
             }
         }
 
-        _logger.LogInformation($"Total words added across all titles: {history.TotalWordsAdded:N0}");
-        _logger.LogInformation($"Average words added per day: {history.AverageWordsPerDay:N0}");
+        _logger?.LogInformation($"Total words added across all titles: {history.TotalWordsAdded:N0}");
+        _logger?.LogInformation($"Average words added per day: {history.AverageWordsPerDay:N0}");
 
         return history;
     }

@@ -52,7 +52,7 @@ import { EcfrApiService, Agency, AgenciesResponse } from '../../services/ecfr-ap
               <div class="agency-info">
                 <span class="agency-name">{{ agency.display_name }}</span>
                 <div class="agency-titles">
-                  @for (ref of agency.cfr_references; track ref.title) {
+                  @for (ref of agency.cfr_references; track $index) {
                     <span class="title-badge">
                       {{ ref.title }}
                     </span>
@@ -72,7 +72,7 @@ import { EcfrApiService, Agency, AgenciesResponse } from '../../services/ecfr-ap
                     <div class="agency-info">
                       <span class="agency-name">{{ child.display_name }}</span>
                       <div class="agency-titles">
-                        @for (ref of child.cfr_references; track ref.title) {
+                        @for (ref of child.cfr_references; track $index) {
                           <span class="title-badge">
                             {{ ref.title }}
                           </span>
