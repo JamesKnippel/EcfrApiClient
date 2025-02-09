@@ -74,7 +74,7 @@ jobs:
 
   build-api:
     if: ${{ github.event_name == 'push' || github.event.inputs.deploy_api == 'true' }}
-    uses: ./.github/workflows/dotnet.yml@master
+    uses: ./.github/workflows/dotnet.yml
 
   build-and-push-images:
     needs: [build-client, build-api]
