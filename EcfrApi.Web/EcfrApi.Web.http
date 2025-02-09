@@ -1,0 +1,6 @@
+@EcfrApi.Web_HostAddress = http://localhost:5217
+
+GET {{EcfrApi.Web_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
