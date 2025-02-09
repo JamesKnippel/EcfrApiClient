@@ -46,6 +46,50 @@ public class EcfrController : ControllerBase
         }
     }
 
+    [HttpGet("agencies/{slug}")]
+    public async Task<ActionResult<Agency>> GetAgencyBySlug(string slug)
+    {
+        try
+        {
+            var response = await _client.GetAgenciesAsync();
+            var agency = FindAgencyBySlug(response.Agencies, slug);
+            
+            if (agency == null)
+            {
+                return NotFound($"Agency with slug '{slug}' not found");
+            }
+
+            return agency;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting agency by slug");
+            return StatusCode(500, "An error occurred while retrieving the agency");
+        }
+    }
+
+    private Agency? FindAgencyBySlug(List<Agency> agencies, string slug)
+    {
+        foreach (var agency in agencies)
+        {
+            if (agency.Slug.Equals(slug, StringComparison.OrdinalIgnoreCase))
+            {
+                return agency;
+            }
+
+            if (agency.Children != null)
+            {
+                var childAgency = FindAgencyBySlug(agency.Children, slug);
+                if (childAgency != null)
+                {
+                    return childAgency;
+                }
+            }
+        }
+
+        return null;
+    }
+
     [HttpGet("title/{titleNumber}/xml")]
     public async Task<ActionResult<string>> GetTitleXml(int titleNumber)
     {
@@ -87,6 +131,27 @@ public class EcfrController : ControllerBase
         {
             _logger.LogError(ex, "Error getting titles for agency {Slug}", slug);
             return StatusCode(500, "An error occurred while retrieving agency titles");
+        }
+    }
+
+    [HttpGet("agencies/{slug}/word-count-history")]
+    public async Task<ActionResult<AgencyWordCountHistory>> GetAgencyWordCountHistory(
+        string slug,
+        [FromQuery] DateTimeOffset? startDate = null,
+        [FromQuery] DateTimeOffset? endDate = null,
+        [FromQuery] int intervalDays = 90)
+    {
+        try
+        {
+            startDate ??= DateTimeOffset.UtcNow.AddYears(-1);
+            endDate ??= DateTimeOffset.UtcNow;
+
+            return await _client.GetAgencyWordCountHistoryAsync(slug, startDate.Value, endDate.Value, intervalDays);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting agency word count history");
+            return StatusCode(500, "An error occurred while retrieving agency word count history");
         }
     }
 }

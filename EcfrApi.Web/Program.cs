@@ -2,6 +2,17 @@ using EcfrApi.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Add CORS support
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        policy.WithOrigins("http://localhost:4200")
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
+
 // Add services to the container.
 builder.Services.AddHttpClient<IEcfrClient, EcfrClient>();
 builder.Services.AddControllers();
@@ -17,6 +28,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+// Enable CORS
+app.UseCors();
 
 app.UseHttpsRedirection();
 
