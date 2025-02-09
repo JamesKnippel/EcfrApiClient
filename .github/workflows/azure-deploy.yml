@@ -26,44 +26,90 @@ env:
   CLIENT_IMAGE_NAME: ecfr-client
 
 jobs:
-  check-changes:
+  build-client:
+    if: ${{ github.event_name == 'push' || github.event.inputs.deploy_client == 'true' }}
     runs-on: ubuntu-latest
     outputs:
       client_changed: ${{ steps.filter.outputs.client_changed }}
-      api_changed: ${{ steps.filter.outputs.api_changed }}
     steps:
     - uses: actions/checkout@v3
 
-    - name: Check for changes
+    - name: Check for client changes
       id: filter
       uses: dorny/paths-filter@v2
       with:
         filters: |
           client_changed:
             - 'ecfr-client/**'
+
+    - name: Setup Node.js
+      if: steps.filter.outputs.client_changed == 'true'
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+        cache-dependency-path: './ecfr-client/package-lock.json'
+
+    - name: Cache node modules
+      if: steps.filter.outputs.client_changed == 'true'
+      uses: actions/cache@v3
+      with:
+        path: ecfr-client/node_modules
+        key: ${{ runner.os }}-node-${{ hashFiles('ecfr-client/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-node-
+
+    - name: Install Angular dependencies
+      if: steps.filter.outputs.client_changed == 'true'
+      run: |
+        cd ecfr-client
+        npm ci
+
+    - name: Build Angular app
+      if: steps.filter.outputs.client_changed == 'true'
+      run: |
+        cd ecfr-client
+        npm run build
+
+  build-api:
+    if: ${{ github.event_name == 'push' || github.event.inputs.deploy_api == 'true' }}
+    runs-on: ubuntu-latest
+    outputs:
+      api_changed: ${{ steps.filter.outputs.api_changed }}
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Check for API changes
+      id: filter
+      uses: dorny/paths-filter@v2
+      with:
+        filters: |
           api_changed:
             - 'EcfrApi.Web/**'
             - 'Dockerfile'
 
-  test-api:
-    needs: check-changes
-    if: ${{ needs.check-changes.outputs.api_changed == 'true' }}
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-
     - name: Setup .NET
+      if: steps.filter.outputs.api_changed == 'true'
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 8.0.x
 
+    - name: Restore dependencies
+      if: steps.filter.outputs.api_changed == 'true'
+      run: dotnet restore
+
+    - name: Build
+      if: steps.filter.outputs.api_changed == 'true'
+      run: dotnet build --no-restore
+
     - name: Test
-      run: dotnet test --verbosity detailed
+      if: steps.filter.outputs.api_changed == 'true'
+      run: dotnet test --no-build --verbosity detailed
 
   build-and-push-images:
-    needs: [check-changes, test-api]
+    needs: [build-client, build-api]
     runs-on: ubuntu-latest
-    if: ${{ needs.check-changes.outputs.client_changed == 'true' || needs.check-changes.outputs.api_changed == 'true' }}
+    if: ${{ needs.build-client.outputs.client_changed == 'true' || needs.build-api.outputs.api_changed == 'true' }}
     outputs:
       api_image: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.API_IMAGE_NAME }}:${{ github.sha }}
       client_image: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.CLIENT_IMAGE_NAME }}:${{ github.sha }}
@@ -86,7 +132,7 @@ jobs:
         password: ${{ secrets.REGISTRY_PASSWORD }}
 
     - name: Build and push API image
-      if: ${{ needs.check-changes.outputs.api_changed == 'true' }}
+      if: ${{ github.event_name == 'push' || github.event.inputs.deploy_api == 'true' }}
       uses: docker/build-push-action@v4
       with:
         context: .
@@ -95,7 +141,7 @@ jobs:
         tags: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.API_IMAGE_NAME }}:${{ github.sha }}
 
     - name: Build and push Client image
-      if: ${{ needs.check-changes.outputs.client_changed == 'true' }}
+      if: ${{ github.event_name == 'push' || github.event.inputs.deploy_client == 'true' }}
       uses: docker/build-push-action@v4
       with:
         context: ./ecfr-client
@@ -113,7 +159,7 @@ jobs:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
 
     - name: Deploy API to Azure Container App
-      if: ${{ needs.check-changes.outputs.api_changed == 'true' }}
+      if: ${{ github.event_name == 'push' || github.event.inputs.deploy_api == 'true' }}
       uses: azure/container-apps-deploy-action@v1
       with:
         acrName: ${{ env.REGISTRY_NAME }}
@@ -123,12 +169,17 @@ jobs:
         targetPort: 80
         ingress: external
         location: eastus
-        imageToDeploy: ${{ needs.build-and-push-images.outputs.api_image }}
-        environmentVariables: |
-          ASPNETCORE_ENVIRONMENT=Production
+        image: ${{ needs.build-and-push-images.outputs.api_image }}
+        cpu: 0.5
+        memory: 1Gi
+        minReplicas: 1
+        maxReplicas: 3
+        env: |
+          - name: ASPNETCORE_ENVIRONMENT
+            value: Production
 
     - name: Deploy Client to Azure Container App
-      if: ${{ needs.check-changes.outputs.client_changed == 'true' }}
+      if: ${{ github.event_name == 'push' || github.event.inputs.deploy_client == 'true' }}
       uses: azure/container-apps-deploy-action@v1
       with:
         acrName: ${{ env.REGISTRY_NAME }}
@@ -138,6 +189,11 @@ jobs:
         targetPort: 80
         ingress: external
         location: eastus
-        imageToDeploy: ${{ needs.build-and-push-images.outputs.client_image }}
-        environmentVariables: |
-          API_HOST=${{ env.AZURE_WEBAPP_NAME }}-api.azurecontainerapps.io
+        image: ${{ needs.build-and-push-images.outputs.client_image }}
+        cpu: 0.5
+        memory: 1Gi
+        minReplicas: 1
+        maxReplicas: 3
+        env: |
+          - name: API_HOST
+            value: ${{ env.AZURE_WEBAPP_NAME }}-api.azurecontainerapps.io
