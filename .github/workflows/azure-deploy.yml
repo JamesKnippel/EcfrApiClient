@@ -109,7 +109,7 @@ jobs:
   build-and-push-images:
     needs: [build-client, build-api]
     runs-on: ubuntu-latest
-    if: ${{ needs.build-client.outputs.client_changed == 'true' || needs.build-api.outputs.api_changed == 'true' }}
+    if: ${{ github.event_name == 'push' || github.event.inputs.deploy_api == 'true' || github.event.inputs.deploy_client == 'true' }}
     outputs:
       api_image: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.API_IMAGE_NAME }}:${{ github.sha }}
       client_image: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.CLIENT_IMAGE_NAME }}:${{ github.sha }}
