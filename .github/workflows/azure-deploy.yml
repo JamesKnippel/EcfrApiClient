@@ -41,7 +41,6 @@ jobs:
         filters: |
           client_changed:
             - 'ecfr-client/**'
-            - '.github/workflows/azure-deploy.yml'
 
     - name: Setup Node.js
       if: steps.filter.outputs.client_changed == 'true'
@@ -74,11 +73,43 @@ jobs:
 
   build-api:
     if: ${{ github.event_name == 'push' || github.event.inputs.deploy_api == 'true' }}
-    uses: ./.github/workflows/dotnet.yml
+    runs-on: ubuntu-latest
+    outputs:
+      api_changed: ${{ steps.filter.outputs.api_changed }}
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Check for API changes
+      id: filter
+      uses: dorny/paths-filter@v2
+      with:
+        filters: |
+          api_changed:
+            - 'EcfrApi.Web/**'
+            - 'Dockerfile'
+
+    - name: Setup .NET
+      if: steps.filter.outputs.api_changed == 'true'
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+
+    - name: Restore dependencies
+      if: steps.filter.outputs.api_changed == 'true'
+      run: dotnet restore
+
+    - name: Build
+      if: steps.filter.outputs.api_changed == 'true'
+      run: dotnet build --no-restore
+
+    - name: Test
+      if: steps.filter.outputs.api_changed == 'true'
+      run: dotnet test --no-build --verbosity detailed
 
   build-and-push-images:
     needs: [build-client, build-api]
     runs-on: ubuntu-latest
+    if: ${{ needs.build-client.outputs.client_changed == 'true' || needs.build-api.outputs.api_changed == 'true' }}
     steps:
     - uses: actions/checkout@v3
 
