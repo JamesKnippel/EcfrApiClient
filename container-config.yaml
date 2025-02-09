@@ -1,0 +1,41 @@
+containers:
+  - name: client
+    image: ${REGISTRY_NAME}.azurecr.io/${CLIENT_IMAGE_NAME}:${GITHUB_SHA}
+    env:
+      - name: API_URL
+        value: /api
+    resources:
+      cpu: 0.5
+      memory: 1Gi
+    probes:
+      - type: liveness
+        httpGet:
+          path: /
+          port: 80
+        initialDelaySeconds: 10
+        periodSeconds: 30
+
+  - name: api
+    image: ${REGISTRY_NAME}.azurecr.io/${API_IMAGE_NAME}:${GITHUB_SHA}
+    env:
+      - name: ASPNETCORE_ENVIRONMENT
+        value: Production
+    resources:
+      cpu: 0.5
+      memory: 1Gi
+    probes:
+      - type: liveness
+        httpGet:
+          path: /api/health
+          port: 80
+        initialDelaySeconds: 10
+        periodSeconds: 30
+
+scale:
+  minReplicas: 1
+  maxReplicas: 3
+  rules:
+    - name: http-rule
+      http:
+        metadata:
+          concurrentRequests: "10"

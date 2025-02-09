@@ -1,0 +1,80 @@
+name: Deploy to Azure
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  AZURE_WEBAPP_NAME: ecfr-app    # Single app name for both frontend and API
+  REGISTRY_NAME: ecfrregistry    # Replace with your registry name
+  API_IMAGE_NAME: ecfr-api
+  CLIENT_IMAGE_NAME: ecfr-client
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build
+      run: dotnet build --no-restore
+
+    - name: Test
+      run: dotnet test --no-build --verbosity normal
+
+  build-and-push-images:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Login to Azure
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Login to Azure Container Registry
+      uses: azure/docker-login@v1
+      with:
+        login-server: ${{ env.REGISTRY_NAME }}.azurecr.io
+        username: ${{ secrets.REGISTRY_USERNAME }}
+        password: ${{ secrets.REGISTRY_PASSWORD }}
+
+    - name: Build and push API image
+      run: |
+        docker build -t ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.API_IMAGE_NAME }}:${{ github.sha }} .
+        docker push ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.API_IMAGE_NAME }}:${{ github.sha }}
+
+    - name: Build and push Client image
+      run: |
+        docker build -t ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.CLIENT_IMAGE_NAME }}:${{ github.sha }} ./ecfr-client
+        docker push ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.CLIENT_IMAGE_NAME }}:${{ github.sha }}
+
+  deploy:
+    needs: build-and-push-images
+    runs-on: ubuntu-latest
+    steps:
+    - name: Login to Azure
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Deploy to Azure Container App
+      uses: azure/container-apps-deploy-action@v1
+      with:
+        appSourcePath: ${{ github.workspace }}
+        acrName: ${{ env.REGISTRY_NAME }}
+        containerAppName: ${{ env.AZURE_WEBAPP_NAME }}
+        resourceGroup: ${{ secrets.AZURE_RESOURCE_GROUP }}
+        targetPort: 80
+        ingress: external
+        containerConfigurationFile: container-config.yaml
