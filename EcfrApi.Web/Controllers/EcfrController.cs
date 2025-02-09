@@ -6,7 +6,7 @@ using EcfrApi.Web.Models;
 namespace EcfrApi.Web.Controllers;
 
 [ApiController]
-[Route("[controller]")]
+[Route("api/[controller]")]
 public class EcfrController : ControllerBase
 {
     private readonly IEcfrClient _client;

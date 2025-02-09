@@ -2,12 +2,12 @@ name: Deploy to Azure
 
 on:
   push:
-    branches: [ master ]
+    branches: [ "master" ]
   workflow_dispatch:
 
 env:
-  AZURE_WEBAPP_NAME: ecfr-app    # Single app name for both frontend and API
-  REGISTRY_NAME: ecfrregistry    # Replace with your registry name
+  AZURE_WEBAPP_NAME: ecfr-app
+  REGISTRY_NAME: ecfrregistry
   API_IMAGE_NAME: ecfr-api
   CLIENT_IMAGE_NAME: ecfr-client
 
@@ -43,6 +43,9 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
     - name: Login to Azure
       uses: azure/login@v1
       with:
@@ -76,13 +79,42 @@ jobs:
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-    - name: Deploy to Azure Container App
+    - name: Create Container App Environment
+      uses: azure/CLI@v1
+      with:
+        inlineScript: |
+          az containerapp env show -n ecfr-app-env -g ${{ secrets.AZURE_RESOURCE_GROUP }} || \
+          az containerapp env create \
+            --name ecfr-app-env \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --location eastus
+
+    - name: Deploy API to Azure Container App
       uses: azure/container-apps-deploy-action@v1
       with:
         appSourcePath: ${{ github.workspace }}
         acrName: ${{ env.REGISTRY_NAME }}
-        containerAppName: ${{ env.AZURE_WEBAPP_NAME }}
+        acrUsername: ${{ secrets.REGISTRY_USERNAME }}
+        acrPassword: ${{ secrets.REGISTRY_PASSWORD }}
+        containerAppName: ${{ env.AZURE_WEBAPP_NAME }}-api
         resourceGroup: ${{ secrets.AZURE_RESOURCE_GROUP }}
+        containerAppEnvironment: ecfr-app-env
         targetPort: 80
         ingress: external
-        containerConfigurationFile: container-config.yaml
+        location: eastus
+        imageToDeploy: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.API_IMAGE_NAME }}:${{ github.sha }}
+
+    - name: Deploy Client to Azure Container App
+      uses: azure/container-apps-deploy-action@v1
+      with:
+        appSourcePath: ${{ github.workspace }}
+        acrName: ${{ env.REGISTRY_NAME }}
+        acrUsername: ${{ secrets.REGISTRY_USERNAME }}
+        acrPassword: ${{ secrets.REGISTRY_PASSWORD }}
+        containerAppName: ${{ env.AZURE_WEBAPP_NAME }}-client
+        resourceGroup: ${{ secrets.AZURE_RESOURCE_GROUP }}
+        containerAppEnvironment: ecfr-app-env
+        targetPort: 80
+        ingress: external
+        location: eastus
+        imageToDeploy: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.CLIENT_IMAGE_NAME }}:${{ github.sha }}

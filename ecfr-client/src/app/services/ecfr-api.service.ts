@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, shareReplay, of } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
@@ -78,107 +78,73 @@ export interface AgencyWordCountHistory {
 })
 export class EcfrApiService {
   private readonly baseUrl = environment.apiUrl;
+  private readonly ecfrBaseUrl = environment.ecfrBaseUrl;
   private cache = new Map<string, Observable<any>>();
 
   constructor(private http: HttpClient) {}
 
-  getTitles(): Observable<TitlesResponse> {
-    const cacheKey = 'titles';
-    if (!this.cache.has(cacheKey)) {
-      const request = this.http.get<TitlesResponse>(`${this.baseUrl}/titles`).pipe(
-        shareReplay(1),
-        catchError(error => {
-          this.cache.delete(cacheKey);
-          throw error;
-        })
+  private handleError<T>(operation = 'operation') {
+    return (error: any): Observable<T> => {
+      console.error(`${operation} failed:`, error);
+      return of({} as T);
+    };
+  }
+
+  private cacheRequest<T>(key: string, request: Observable<T>): Observable<T> {
+    if (!this.cache.has(key)) {
+      this.cache.set(
+        key,
+        request.pipe(
+          shareReplay(1),
+          catchError(this.handleError<T>())
+        )
       );
-      this.cache.set(cacheKey, request);
     }
-    return this.cache.get(cacheKey)!;
+    return this.cache.get(key)!;
+  }
+
+  getTitles(): Observable<TitlesResponse> {
+    const url = `${this.baseUrl}/ecfr/titles`;
+    return this.cacheRequest<TitlesResponse>('titles', this.http.get<TitlesResponse>(url));
   }
 
   getAgencies(): Observable<AgenciesResponse> {
-    const cacheKey = 'agencies';
-    if (!this.cache.has(cacheKey)) {
-      const request = this.http.get<AgenciesResponse>(`${this.baseUrl}/agencies`).pipe(
-        shareReplay(1),
-        catchError(error => {
-          this.cache.delete(cacheKey);
-          throw error;
-        })
-      );
-      this.cache.set(cacheKey, request);
-    }
-    return this.cache.get(cacheKey)!;
+    const url = `${this.baseUrl}/ecfr/agencies`;
+    return this.cacheRequest<AgenciesResponse>('agencies', this.http.get<AgenciesResponse>(url));
   }
 
   getAgencyBySlug(slug: string): Observable<Agency> {
-    const cacheKey = `agency_${slug}`;
-    if (!this.cache.has(cacheKey)) {
-      const request = this.http.get<Agency>(`${this.baseUrl}/agencies/${slug}`).pipe(
-        shareReplay(1),
-        catchError(error => {
-          this.cache.delete(cacheKey);
-          throw error;
-        })
-      );
-      this.cache.set(cacheKey, request);
-    }
-    return this.cache.get(cacheKey)!;
+    const url = `${this.baseUrl}/ecfr/agencies/${slug}`;
+    return this.cacheRequest<Agency>(`agency-${slug}`, this.http.get<Agency>(url));
   }
 
   getAgencyTitles(slug: string): Observable<AgencyTitlesResult> {
-    const cacheKey = `agency_titles_${slug}`;
-    if (!this.cache.has(cacheKey)) {
-      const request = this.http.get<AgencyTitlesResult>(`${this.baseUrl}/agencies/${slug}/titles`).pipe(
-        shareReplay(1),
-        catchError(error => {
-          this.cache.delete(cacheKey);
-          throw error;
-        })
-      );
-      this.cache.set(cacheKey, request);
-    }
-    return this.cache.get(cacheKey)!;
+    const url = `${this.baseUrl}/ecfr/agencies/${slug}/titles`;
+    return this.cacheRequest<AgencyTitlesResult>(
+      `agency-titles-${slug}`,
+      this.http.get<AgencyTitlesResult>(url)
+    );
   }
 
   getTitleXml(titleNumber: number): Observable<string> {
-    const cacheKey = `title_xml_${titleNumber}`;
-    if (!this.cache.has(cacheKey)) {
-      const request = this.http.get(`${this.baseUrl}/title/${titleNumber}/xml`, { responseType: 'text' }).pipe(
-        shareReplay(1),
-        catchError(error => {
-          this.cache.delete(cacheKey);
-          throw error;
-        })
-      );
-      this.cache.set(cacheKey, request);
-    }
-    return this.cache.get(cacheKey)!;
+    const url = `${this.baseUrl}/ecfr/titles/${titleNumber}/xml`;
+    return this.http.get(url, { responseType: 'text' });
   }
 
-  getAgencyWordCountHistory(slug: string, startDate?: Date, endDate?: Date): Observable<AgencyWordCountHistory> {
-    let url = `${this.baseUrl}/agencies/${slug}/word-count-history`;
-    const params = new URLSearchParams();
-    
+  getAgencyWordCountHistory(
+    slug: string,
+    startDate?: Date,
+    endDate?: Date
+  ): Observable<AgencyWordCountHistory> {
+    let params = new HttpParams();
     if (startDate) {
-      params.append('startDate', startDate.toISOString());
+      params = params.set('startDate', startDate.toISOString());
     }
     if (endDate) {
-      params.append('endDate', endDate.toISOString());
-    }
-    
-    const queryString = params.toString();
-    if (queryString) {
-      url += '?' + queryString;
+      params = params.set('endDate', endDate.toISOString());
     }
 
-    return this.http.get<AgencyWordCountHistory>(url).pipe(
-      map(history => ({
-        ...history,
-        startDate: history.startDate,  
-        endDate: history.endDate       
-      }))
-    );
+    const url = `${this.baseUrl}/ecfr/agencies/${slug}/word-count-history`;
+    return this.http.get<AgencyWordCountHistory>(url, { params });
   }
 }

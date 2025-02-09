@@ -3,15 +3,19 @@ import { Routes } from '@angular/router';
 export const routes: Routes = [
   {
     path: '',
-    redirectTo: '/agencies',
+    redirectTo: 'api/ecfr/agencies',
     pathMatch: 'full'
   },
   {
-    path: 'agencies',
+    path: 'api/ecfr/agencies',
     loadComponent: () => import('./components/agency-list/agency-list.component').then(m => m.AgencyListComponent)
   },
   {
-    path: 'agencies/:slug',
+    path: 'api/ecfr/agencies/:slug',
     loadComponent: () => import('./components/agency-detail/agency-detail.component').then(m => m.AgencyDetailComponent)
+  },
+  {
+    path: '**',
+    redirectTo: 'api/ecfr/agencies'
   }
 ];
