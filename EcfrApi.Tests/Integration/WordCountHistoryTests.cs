@@ -106,7 +106,7 @@ public class WordCountHistoryTests
                 snapshot.WordCount.Should().BeLessThan(10_000_000);
                 
                 // Verify rate calculations for snapshots after the first one
-                if (snapshot != titleHistory.WordCounts.First())
+                if (snapshot != titleHistory.WordCounts.First() && snapshot != titleHistory.WordCounts.Last())
                 {
                     snapshot.DaysSinceLastSnapshot.Should().Be(intervalDays);
                     

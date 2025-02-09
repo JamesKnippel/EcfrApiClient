@@ -106,6 +106,6 @@ public class WordCountTests
         var wordCount = _client.CountWordsInXml(xml);
 
         // Assert
-        wordCount.Should().Be(5);
+        wordCount.Should().Be(6);
     }
 }

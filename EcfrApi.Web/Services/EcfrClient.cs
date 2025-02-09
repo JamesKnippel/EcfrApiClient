@@ -15,7 +15,7 @@ public interface IEcfrClient
     Task<Agency> GetAgencyBySlugAsync(string slug);
     Task<AgencyTitlesResult> GetAgencyTitlesAsync(string slug);
     Task<AgencyTitlesResult> GetAgencyTitlesWithWordCountAsync(string slug);
-    Task<AgencyWordCountHistory> GetAgencyWordCountHistoryAsync(string slug, DateTimeOffset startDate, DateTimeOffset endDate, int intervalDays = 30);
+    Task<AgencyWordCountHistory> GetAgencyWordCountHistoryAsync(string slug, DateTimeOffset startDate, DateTimeOffset endDate, int intervalDays = 90);
 }
 
 public class EcfrClient : IEcfrClient
@@ -121,40 +121,45 @@ public class EcfrClient : IEcfrClient
     }
 
     public async Task<AgencyWordCountHistory> GetAgencyWordCountHistoryAsync(
-        string slug, DateTimeOffset startDate, DateTimeOffset endDate, int intervalDays = 30)
+        string slug, DateTimeOffset startDate, DateTimeOffset endDate, int intervalDays = 90)
     {
         if (startDate > endDate)
         {
             throw new ArgumentException("Start date must be before end date");
         }
 
-        _logger?.LogInformation("Getting word count history for agency {Slug} from {StartDate} to {EndDate}", 
-            slug, startDate, endDate);
-
         var agency = await GetAgencyBySlugAsync(slug);
-        var titles = await GetAgencyTitlesAsync(slug);
+        if (agency == null)
+        {
+            throw new ArgumentException($"No agency found with slug '{slug}'");
+        }
 
+        var titles = await GetAgencyTitlesAsync(slug);
         var history = new AgencyWordCountHistory
         {
             Agency = agency,
+            TitleHistories = new List<TitleWordCountHistory>(),
             StartDate = startDate,
             EndDate = endDate
         };
 
         foreach (var title in titles.Titles)
         {
-            _logger?.LogInformation("Processing history for Title {TitleNumber}", title.Number);
+            _logger.LogInformation($"Processing history for Title {title.Number}");
 
             var titleHistory = new TitleWordCountHistory
             {
                 TitleNumber = title.Number,
-                TitleName = title.Name
+                TitleName = title.Name,
+                WordCounts = new List<WordCountSnapshot>()
             };
 
-            var currentDate = endDate;
-            WordCountSnapshot? previousSnapshot = null;
+            // Calculate dates at regular intervals
+            var currentDate = startDate;
+            DateTimeOffset? previousDate = null;
+            int? previousWordCount = null;
 
-            while (currentDate >= startDate)
+            while (currentDate <= endDate)
             {
                 try
                 {
@@ -164,63 +169,86 @@ public class EcfrClient : IEcfrClient
                     var snapshot = new WordCountSnapshot
                     {
                         Date = currentDate,
-                        WordCount = wordCount
+                        WordCount = wordCount,
+                        DaysSinceLastSnapshot = previousDate.HasValue ? (int)(currentDate - previousDate.Value).TotalDays : 0,
+                        WordsAddedSinceLastSnapshot = previousWordCount.HasValue ? wordCount - previousWordCount.Value : 0
                     };
 
-                    if (previousSnapshot != null)
+                    // Calculate words per day rate
+                    if (snapshot.DaysSinceLastSnapshot > 0)
                     {
-                        snapshot.WordsAddedSinceLastSnapshot = wordCount - previousSnapshot.WordCount;
-                        snapshot.DaysSinceLastSnapshot = (int)(previousSnapshot.Date - currentDate).TotalDays;
-                        snapshot.WordsPerDay = snapshot.DaysSinceLastSnapshot > 0 
-                            ? (double)snapshot.WordsAddedSinceLastSnapshot / snapshot.DaysSinceLastSnapshot 
-                            : 0;
+                        snapshot.WordsPerDay = (double)snapshot.WordsAddedSinceLastSnapshot / snapshot.DaysSinceLastSnapshot;
                     }
 
                     titleHistory.WordCounts.Add(snapshot);
-                    previousSnapshot = snapshot;
+                    _logger.LogInformation($"Title {title.Number} at {currentDate:yyyy-MM-dd}: {wordCount:N0} words");
 
-                    _logger?.LogInformation("Title {TitleNumber} at {Date}: {WordCount:N0} words", 
-                        title.Number, currentDate.ToString("yyyy-MM-dd"), wordCount);
+                    previousDate = currentDate;
+                    previousWordCount = wordCount;
                 }
                 catch (Exception ex)
                 {
-                    _logger?.LogWarning(ex, "Failed to get word count for Title {TitleNumber} at {Date}", 
-                        title.Number, currentDate.ToString("yyyy-MM-dd"));
+                    _logger.LogWarning(ex, $"Failed to get word count for Title {title.Number} at {currentDate:yyyy-MM-dd}");
                 }
 
-                currentDate = currentDate.AddDays(-intervalDays);
+                currentDate = currentDate.AddDays(intervalDays);
             }
 
-            // Sort snapshots by date (oldest first)
-            titleHistory.WordCounts = titleHistory.WordCounts
-                .OrderBy(s => s.Date)
-                .ToList();
+            // Add final snapshot at end date if not already included
+            if (currentDate > endDate && previousDate.HasValue && previousDate.Value < endDate)
+            {
+                try
+                {
+                    var xml = await GetTitleXmlForDateAsync(title.Number, endDate);
+                    var wordCount = CountWordsInXml(xml);
 
-            history.TitleHistories.Add(titleHistory);
+                    var snapshot = new WordCountSnapshot
+                    {
+                        Date = endDate,
+                        WordCount = wordCount,
+                        DaysSinceLastSnapshot = (int)(endDate - previousDate.Value).TotalDays,
+                        WordsAddedSinceLastSnapshot = previousWordCount.HasValue ? wordCount - previousWordCount.Value : 0
+                    };
+
+                    // Calculate words per day rate
+                    if (snapshot.DaysSinceLastSnapshot > 0)
+                    {
+                        snapshot.WordsPerDay = (double)snapshot.WordsAddedSinceLastSnapshot / snapshot.DaysSinceLastSnapshot;
+                    }
+
+                    titleHistory.WordCounts.Add(snapshot);
+                    _logger.LogInformation($"Title {title.Number} at {endDate:yyyy-MM-dd}: {wordCount:N0} words");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, $"Failed to get word count for Title {title.Number} at {endDate:yyyy-MM-dd}");
+                }
+            }
+
+            if (titleHistory.WordCounts.Any())
+            {
+                history.TitleHistories.Add(titleHistory);
+            }
         }
 
-        _logger?.LogInformation("Total words added across all titles: {TotalWords:N0}", 
-            history.TotalWordsAdded);
-        _logger?.LogInformation("Average words added per day: {AverageWords:N0}", 
-            history.AverageWordsPerDay);
+        _logger.LogInformation($"Total words added across all titles: {history.TotalWordsAdded:N0}");
+        _logger.LogInformation($"Average words added per day: {history.AverageWordsPerDay:N0}");
 
         return history;
     }
 
     internal int CountWordsInXml(string xml)
     {
-        // Remove XML tags and attributes
-        var textOnly = Regex.Replace(xml, "<[^>]*>", " ");
+        // First remove all XML attributes by removing everything between quotes, handling both single and double quotes
+        xml = Regex.Replace(xml, @"\s+\w+\s*=\s*""[^""]*""|\s+\w+\s*=\s*'[^']*'", "");
         
-        // Remove extra whitespace
-        textOnly = Regex.Replace(textOnly, @"\s+", " ").Trim();
+        // Then remove all XML tags (including tag names)
+        xml = Regex.Replace(xml, @"<[^>]*>", " ");
         
-        // Split by space and count non-empty words
-        var wordCount = textOnly.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+        // Remove multiple spaces and trim
+        xml = Regex.Replace(xml, @"\s+", " ").Trim();
         
-        _logger?.LogDebug("Counted {WordCount:N0} words in XML content", wordCount);
-        
-        return wordCount;
+        return xml.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
     }
 
     public async Task<string> GetTitleXmlAsync(int titleNumber)
