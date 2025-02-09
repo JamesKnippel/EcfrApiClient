@@ -74,25 +74,7 @@ jobs:
 
   build-api:
     if: ${{ github.event_name == 'push' || github.event.inputs.deploy_api == 'true' }}
-    runs-on: ubuntu-latest
-    outputs:
-      api_changed: ${{ steps.filter.outputs.api_changed }}
-    steps:
-    - uses: actions/checkout@v3
-
-    - name: Check for API changes
-      id: filter
-      uses: dorny/paths-filter@v2
-      with:
-        filters: |
-          api_changed:
-            - 'EcfrApi.Web/**'
-            - '.github/workflows/**'
-            - 'Dockerfile'
-
-    - name: Build and Test API
-      if: steps.filter.outputs.api_changed == 'true'
-      uses: ./.github/workflows/dotnet.yml
+    uses: ./.github/workflows/dotnet.yml@master
 
   build-and-push-images:
     needs: [build-client, build-api]
