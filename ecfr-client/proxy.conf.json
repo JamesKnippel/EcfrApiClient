@@ -4,5 +4,14 @@
     "secure": false,
     "logLevel": "debug",
     "changeOrigin": true
+  },
+  "/api/ecfr/agencies/*": {
+    "target": "http://localhost:5217",
+    "secure": false,
+    "logLevel": "debug",
+    "changeOrigin": true,
+    "pathRewrite": {
+      "^/api/ecfr/agencies": "/api/ecfr/agencies"
+    }
   }
 }

@@ -406,7 +406,7 @@ export class AgencyDetailComponent implements OnInit, OnDestroy, OnChanges, Afte
         },
         error: (error) => {
           console.error('Error loading word count history:', error);
-          this.snackBar.open('Error loading word count history', 'Dismiss', {
+          this.snackBar.open('Error loading word count history, please be patient DOGELords. No database in this MVP - just caching. ', 'Dismiss', {
             duration: 5000,
             horizontalPosition: 'center',
             verticalPosition: 'bottom'

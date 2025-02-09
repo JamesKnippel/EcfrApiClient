@@ -79,16 +79,6 @@ jobs:
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-    - name: Create Container App Environment
-      uses: azure/CLI@v1
-      with:
-        inlineScript: |
-          az containerapp env show -n ecfr-app-env -g ${{ secrets.AZURE_RESOURCE_GROUP }} || \
-          az containerapp env create \
-            --name ecfr-app-env \
-            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
-            --location eastus
-
     - name: Deploy API to Azure Container App
       uses: azure/container-apps-deploy-action@v1
       with:
@@ -98,23 +88,23 @@ jobs:
         acrPassword: ${{ secrets.REGISTRY_PASSWORD }}
         containerAppName: ${{ env.AZURE_WEBAPP_NAME }}-api
         resourceGroup: ${{ secrets.AZURE_RESOURCE_GROUP }}
-        containerAppEnvironment: ecfr-app-env
+        containerAppEnvironment: ecfr-env
         targetPort: 80
         ingress: external
         location: eastus
-        imageToDeploy: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.API_IMAGE_NAME }}:${{ github.sha }}
+        image: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.API_IMAGE_NAME }}:${{ github.sha }}
 
     - name: Deploy Client to Azure Container App
       uses: azure/container-apps-deploy-action@v1
       with:
-        appSourcePath: ${{ github.workspace }}
+        appSourcePath: ${{ github.workspace }}/ecfr-client
         acrName: ${{ env.REGISTRY_NAME }}
         acrUsername: ${{ secrets.REGISTRY_USERNAME }}
         acrPassword: ${{ secrets.REGISTRY_PASSWORD }}
         containerAppName: ${{ env.AZURE_WEBAPP_NAME }}-client
         resourceGroup: ${{ secrets.AZURE_RESOURCE_GROUP }}
-        containerAppEnvironment: ecfr-app-env
+        containerAppEnvironment: ecfr-env
         targetPort: 80
         ingress: external
         location: eastus
-        imageToDeploy: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.CLIENT_IMAGE_NAME }}:${{ github.sha }}
+        image: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.CLIENT_IMAGE_NAME }}:${{ github.sha }}
