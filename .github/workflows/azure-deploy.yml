@@ -93,6 +93,13 @@ jobs:
         ingress: external
         location: eastus
         image: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.API_IMAGE_NAME }}:${{ github.sha }}
+        cpu: 0.5
+        memory: 1Gi
+        minReplicas: 1
+        maxReplicas: 3
+        env: |
+          - name: ASPNETCORE_ENVIRONMENT
+            value: Production
 
     - name: Deploy Client to Azure Container App
       uses: azure/container-apps-deploy-action@v1
@@ -108,3 +115,10 @@ jobs:
         ingress: external
         location: eastus
         image: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.CLIENT_IMAGE_NAME }}:${{ github.sha }}
+        cpu: 0.5
+        memory: 1Gi
+        minReplicas: 1
+        maxReplicas: 3
+        env: |
+          - name: API_HOST
+            value: ${{ env.AZURE_WEBAPP_NAME }}-api.azurecontainerapps.io

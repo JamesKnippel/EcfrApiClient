@@ -8,6 +8,6 @@ RUN npm run build
 
 FROM nginx:alpine
 COPY --from=builder /app/dist/ecfr-client/browser /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+COPY nginx.conf /etc/nginx/templates/default.conf.template
+ENV API_HOST=localhost
+CMD ["/bin/sh", "-c", "envsubst '${API_HOST}' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"]
