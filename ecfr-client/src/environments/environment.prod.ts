@@ -1,5 +1,5 @@
 export const environment = {
     production: true,
-    apiUrl: '/api',  // Match the API service paths which expect /api/ecfr/...
+    apiUrl: '/api',  // Static Web Apps will handle the proxy
     ecfrBaseUrl: 'https://www.ecfr.gov'
 };
