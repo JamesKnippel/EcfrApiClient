@@ -42,7 +42,8 @@ public class TitleCacheTests : IDisposable
         // Initialize services
         _dbContext = provider.GetRequiredService<EcfrDbContext>();
         _dbContext.Database.OpenConnection();
-        _dbContext.Database.EnsureCreated();
+        _dbContext.Database.EnsureDeleted(); // Clear any existing database
+        _dbContext.Database.Migrate(); // Apply migrations instead of EnsureCreated
 
         _client = provider.GetRequiredService<IEcfrClient>();
         _cacheService = provider.GetRequiredService<ITitleCacheService>();
