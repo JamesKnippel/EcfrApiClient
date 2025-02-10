@@ -2,6 +2,7 @@ using EcfrApi.Web.Services;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.EntityFrameworkCore;
 using EcfrApi.Web.Data;
+using System.Net;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,13 +18,9 @@ builder.Services.AddHttpClient<IEcfrClient, EcfrClient>(client =>
     client.BaseAddress = new Uri("https://www.ecfr.gov");
     client.DefaultRequestHeaders.Add("User-Agent", "EcfrApiClient/1.0");
 })
-.ConfigureHttpMessageHandlerBuilder(builder =>
+.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
 {
-    builder.PrimaryHandler = new SocketsHttpHandler
-    {
-        PooledConnectionLifetime = TimeSpan.FromMinutes(2),
-        MaxConnectionsPerServer = 10
-    };
+    AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
 });
 
 builder.Services.AddControllers();

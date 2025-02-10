@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Xml;
 using EcfrApi.Web.Models;
 using System.Net.Http.Headers;
 using Microsoft.Extensions.Logging;
@@ -16,6 +17,7 @@ public interface IEcfrClient
     Task<AgencyTitlesResult> GetAgencyTitlesAsync(string slug);
     Task<AgencyTitlesResult> GetAgencyTitlesWithWordCountAsync(string slug);
     Task<AgencyWordCountHistory> GetAgencyWordCountHistoryAsync(string slug, DateTimeOffset startDate, DateTimeOffset endDate);
+    Task<int> CountWordsInXml(string xml);
 }
 
 public class EcfrClient : IEcfrClient
@@ -43,8 +45,7 @@ public class EcfrClient : IEcfrClient
         using var request = new HttpRequestMessage(HttpMethod.Get, "/api/versioner/v1/titles");
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         
-        var response = await _httpClient.SendAsync(request);
-        response.EnsureSuccessStatusCode();
+        var response = await GetWithRetryAsync(request.RequestUri.ToString());
         var content = await response.Content.ReadAsStringAsync();
         return JsonSerializer.Deserialize<TitlesResponse>(content) ?? new TitlesResponse();
     }
@@ -54,8 +55,7 @@ public class EcfrClient : IEcfrClient
         using var request = new HttpRequestMessage(HttpMethod.Get, "/api/admin/v1/agencies.json");
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         
-        var response = await _httpClient.SendAsync(request);
-        response.EnsureSuccessStatusCode();
+        var response = await GetWithRetryAsync(request.RequestUri.ToString());
         var content = await response.Content.ReadAsStringAsync();
         return JsonSerializer.Deserialize<AgenciesResponse>(content) ?? new AgenciesResponse();
     }
@@ -139,7 +139,7 @@ public class EcfrClient : IEcfrClient
         {
             _logger?.LogInformation("Processing Title {TitleNumber}...", title.Number);
             var xml = await GetTitleXmlAsync(title.Number);
-            title.WordCount = CountWordsInXml(xml);
+            title.WordCount = await CountWordsInXml(xml);
             _logger?.LogInformation("Title {TitleNumber} has {WordCount:N0} words", 
                 title.Number, title.WordCount);
         }
@@ -155,6 +155,11 @@ public class EcfrClient : IEcfrClient
         DateTimeOffset startDate,
         DateTimeOffset endDate)
     {
+        if (startDate >= endDate)
+        {
+            throw new ArgumentException("Start date must be before end date");
+        }
+
         var agency = await GetAgencyBySlugAsync(agencySlug);
         var history = new AgencyWordCountHistory
         { 
@@ -221,7 +226,7 @@ public class EcfrClient : IEcfrClient
                             // Get from API and cache
                             await Task.Delay(RateLimitDelayMs);
                             var xml = await GetTitleXmlForDateAsync(title.Number, issueDate);
-                            var wordCount = CountWordsInXml(xml);
+                            var wordCount = await CountWordsInXml(xml);
                             
                             // Cache the result
                             await _cacheService.UpdateTitleCacheAsync(title.Number, issueDate, xml);
@@ -265,18 +270,25 @@ public class EcfrClient : IEcfrClient
         return dates;
     }
 
-    internal int CountWordsInXml(string xml)
+    public async Task<int> CountWordsInXml(string xml)
     {
-        // First remove all XML attributes by removing everything between quotes, handling both single and double quotes
-        xml = Regex.Replace(xml, @"\s+\w+\s*=\s*""[^""]*""|\s+\w+\s*=\s*'[^']*'", "");
-        
-        // Then remove all XML tags (including tag names)
-        xml = Regex.Replace(xml, @"<[^>]*>", " ");
-        
-        // Remove multiple spaces and trim
-        xml = Regex.Replace(xml, @"\s+", " ").Trim();
-        
-        return xml.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+        if (string.IsNullOrWhiteSpace(xml))
+            return 0;
+
+        return await Task.Run(() =>
+        {
+            // First remove all XML attributes
+            var noAttrXml = Regex.Replace(xml, @"\s+\w+\s*=\s*""[^""]*""|\s+\w+\s*=\s*'[^']*'", "");
+
+            // Then remove all XML tags
+            var noTagsXml = Regex.Replace(noAttrXml, @"<[^>]*>", " ");
+
+            // Normalize whitespace
+            var normalizedText = Regex.Replace(noTagsXml, @"\s+", " ").Trim();
+
+            // Split by space and count non-empty words
+            return normalizedText.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+        });
     }
 
     public async Task<string> GetTitleXmlAsync(int titleNumber)
@@ -310,9 +322,39 @@ public class EcfrClient : IEcfrClient
         
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/xml"));
         
-        var response = await _httpClient.GetAsync(request.RequestUri);
-        response.EnsureSuccessStatusCode();
-        
+        var response = await GetWithRetryAsync(request.RequestUri.ToString());
         return await response.Content.ReadAsStringAsync();
+    }
+
+    private async Task<T> RetryWithBackoffAsync<T>(Func<Task<T>> action, int maxRetries = 3)
+    {
+        for (int i = 0; i < maxRetries; i++)
+        {
+            try
+            {
+                return await action();
+            }
+            catch (HttpRequestException ex) when (ex.Message.Contains("429"))
+            {
+                if (i == maxRetries - 1)
+                    throw;
+
+                var delay = TimeSpan.FromSeconds(Math.Pow(2, i)); // Exponential backoff: 1s, 2s, 4s
+                _logger?.LogWarning("Rate limited. Retrying in {Delay} seconds...", delay.TotalSeconds);
+                await Task.Delay(delay);
+            }
+        }
+        throw new Exception("Should not reach here");
+    }
+
+    private async Task<HttpResponseMessage> GetWithRetryAsync(string url)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(url);
+        return await RetryWithBackoffAsync(async () =>
+        {
+            var response = await _httpClient.GetAsync(url);
+            response.EnsureSuccessStatusCode();
+            return response;
+        });
     }
 }

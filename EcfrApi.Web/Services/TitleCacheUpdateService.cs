@@ -78,18 +78,18 @@ public class TitleCacheUpdateService : BackgroundService
 
             try
             {
-                var latestDate = DateTimeOffset.Parse(title.LatestIssueDate);
+                var issueDate = DateTimeOffset.Parse(title.LatestAmendedOn ?? throw new ArgumentNullException(nameof(title.LatestAmendedOn)));
                 
                 // Only update if not already cached
-                if (!await cacheService.IsCachedAsync(title.Number, latestDate))
+                if (!await cacheService.IsCachedAsync(title.Number, issueDate))
                 {
-                    var xml = await ecfrClient.GetTitleXmlForDateAsync(title.Number, latestDate);
-                    await cacheService.UpdateTitleCacheAsync(title.Number, latestDate, xml);
+                    var xml = await ecfrClient.GetTitleXmlForDateAsync(title.Number, issueDate);
+                    await cacheService.UpdateTitleCacheAsync(title.Number, issueDate, xml);
                     
                     processedTitles++;
                     _logger.LogInformation(
                         "Updated cache for Title {TitleNumber} at date {Date} ({Progress}% complete)",
-                        title.Number, latestDate, (processedTitles * 100) / totalTitles);
+                        title.Number, issueDate, (processedTitles * 100) / totalTitles);
 
                     // Add delay to avoid rate limiting
                     await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
