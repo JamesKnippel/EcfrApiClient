@@ -104,13 +104,13 @@ public class TitleWordCountHistory
     public List<WordCountSnapshot> WordCounts { get; set; } = new();
     
     public int TotalWordsAdded => 
-        WordCounts.Count > 1 
-            ? WordCounts[^1].WordCount - WordCounts[0].WordCount 
+        WordCounts.Count > 0 
+            ? WordCounts[^1].WordCount
             : 0;
             
     public double AverageWordsPerDay =>
-        WordCounts.Count > 1
-            ? (double)TotalWordsAdded / (WordCounts[^1].Date - WordCounts[0].Date).TotalDays
+        WordCounts.Count > 0
+            ? TotalWordsAdded
             : 0;
 }
 

@@ -1,10 +1,12 @@
 using EcfrApi.Web.Services;
+using EcfrApi.Web.Models;
+using EcfrApi.Web.Data;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using System.Text;
+using Microsoft.EntityFrameworkCore;
+using System;
+using System.Threading.Tasks;
 using Xunit;
-using Xunit.Abstractions;
 
 namespace EcfrApi.Tests.Integration;
 
@@ -17,6 +19,9 @@ public class EcfrClientTests
     public EcfrClientTests()
     {
         var services = new ServiceCollection();
+        services.AddDbContext<EcfrDbContext>(options => 
+            options.UseInMemoryDatabase("TestDb"));
+        services.AddScoped<ITitleCacheService, TitleCacheService>();
         services.AddHttpClient<IEcfrClient, EcfrClient>();
         var provider = services.BuildServiceProvider();
         _client = provider.GetRequiredService<IEcfrClient>();
@@ -101,7 +106,7 @@ public class EcfrClientTests
         // Act & Assert
         await _client.Invoking(c => c.GetAgencyBySlugAsync(invalidSlug))
             .Should().ThrowAsync<ArgumentException>()
-            .WithMessage($"Agency with slug '{invalidSlug}' not found");
+            .WithMessage("*Agency with slug 'invalid-agency-slug' not found*");
     }
 
     [Fact]
@@ -158,7 +163,7 @@ public class EcfrClientTests
         // Act & Assert
         await _client.Invoking(c => c.GetAgencyTitlesWithWordCountAsync(invalidSlug))
             .Should().ThrowAsync<ArgumentException>()
-            .WithMessage($"Agency with slug '{invalidSlug}' not found");
+            .WithMessage("*Agency with slug 'invalid-agency-slug' not found*");
     }
 
     [Fact]

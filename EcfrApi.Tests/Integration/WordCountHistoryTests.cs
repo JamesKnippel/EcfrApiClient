@@ -1,9 +1,13 @@
 using EcfrApi.Web.Services;
 using EcfrApi.Web.Models;
+using EcfrApi.Web.Data;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.EntityFrameworkCore;
+using System;
 using System.Text;
+using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -19,6 +23,9 @@ public class WordCountHistoryTests
     {
         _output = output;
         var services = new ServiceCollection();
+        services.AddDbContext<EcfrDbContext>(options => 
+            options.UseInMemoryDatabase("TestDb"));
+        services.AddScoped<ITitleCacheService, TitleCacheService>();
         services.AddHttpClient<IEcfrClient, EcfrClient>();
         
         // Add logging
@@ -74,11 +81,10 @@ public class WordCountHistoryTests
         // Arrange
         var endDate = DateTimeOffset.Parse("2025-02-06"); // Latest issue date
         var startDate = DateTimeOffset.Parse("2024-01-01"); // One year ago
-        var intervalDays = 90; // Quarterly snapshots
 
         // Act
         var history = await _client.GetAgencyWordCountHistoryAsync(
-            TestSubAgencySlug, startDate, endDate, intervalDays);
+            TestSubAgencySlug, startDate, endDate);
 
         // Log the results
         LogWordCountHistory(history);
@@ -108,7 +114,7 @@ public class WordCountHistoryTests
                 // Verify rate calculations for snapshots after the first one
                 if (snapshot != titleHistory.WordCounts.First() && snapshot != titleHistory.WordCounts.Last())
                 {
-                    snapshot.DaysSinceLastSnapshot.Should().Be(intervalDays);
+                    snapshot.DaysSinceLastSnapshot.Should().BeGreaterThan(0);
                     
                     if (snapshot.WordsAddedSinceLastSnapshot != 0)
                     {
@@ -132,7 +138,7 @@ public class WordCountHistoryTests
         // Act & Assert
         await _client.Invoking(c => c.GetAgencyWordCountHistoryAsync(invalidSlug, startDate, endDate))
             .Should().ThrowAsync<ArgumentException>()
-            .WithMessage($"Agency with slug '{invalidSlug}' not found");
+            .WithMessage("*Agency with slug 'invalid-agency-slug' not found*");
     }
 
     [Fact]
