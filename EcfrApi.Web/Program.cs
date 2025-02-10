@@ -31,8 +31,15 @@ var app = builder.Build();
 var basePath = Environment.GetEnvironmentVariable("ASPNETCORE_BASEPATH") ?? "";
 
 // Configure the HTTP request pipeline.
-app.UseSwagger();
-app.UseSwaggerUI();
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+else
+{
+    app.UseHttpsRedirection();
+}
 
 // Use CORS before routing
 app.UseCors();
