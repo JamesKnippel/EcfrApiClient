@@ -1,12 +1,28 @@
 using EcfrApi.Web.Services;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Add database
+builder.Services.AddDbContext<EcfrDbContext>(options =>
+    options.UseSqlite(
+        builder.Configuration.GetConnectionString("DefaultConnection") ?? 
+        "Data Source=ecfr.db"));
 
 // Add services to the container.
 builder.Services.AddHttpClient<IEcfrClient, EcfrClient>(client =>
 {
     client.BaseAddress = new Uri("https://www.ecfr.gov");
+    client.DefaultRequestHeaders.Add("User-Agent", "EcfrApiClient/1.0");
+})
+.ConfigureHttpMessageHandlerBuilder(builder =>
+{
+    builder.PrimaryHandler = new SocketsHttpHandler
+    {
+        PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+        MaxConnectionsPerServer = 10
+    };
 });
 
 builder.Services.AddControllers();
@@ -24,6 +40,10 @@ builder.Services.AddCors(options =>
               .AllowAnyMethod();
     });
 });
+
+// Add caching services
+builder.Services.AddScoped<ITitleCacheService, TitleCacheService>();
+builder.Services.AddHostedService<TitleCacheUpdateService>();
 
 var app = builder.Build();
 
@@ -55,5 +75,12 @@ if (!string.IsNullOrEmpty(basePath))
 
 app.MapControllers();
 app.MapHealthChecks("/health");
+
+// Ensure database is created
+using (var scope = app.Services.CreateScope())
+{
+    var context = scope.ServiceProvider.GetRequiredService<EcfrDbContext>();
+    context.Database.EnsureCreated();
+}
 
 app.Run();

@@ -15,18 +15,25 @@ public interface IEcfrClient
     Task<Agency> GetAgencyBySlugAsync(string slug);
     Task<AgencyTitlesResult> GetAgencyTitlesAsync(string slug);
     Task<AgencyTitlesResult> GetAgencyTitlesWithWordCountAsync(string slug);
-    Task<AgencyWordCountHistory> GetAgencyWordCountHistoryAsync(string slug, DateTimeOffset startDate, DateTimeOffset endDate, int intervalDays = 90);
+    Task<AgencyWordCountHistory> GetAgencyWordCountHistoryAsync(string slug, DateTimeOffset startDate, DateTimeOffset endDate);
 }
 
 public class EcfrClient : IEcfrClient
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<EcfrClient>? _logger;
+    private readonly ITitleCacheService _cacheService;
+    private static readonly SemaphoreSlim _rateLimitSemaphore = new SemaphoreSlim(2);
+    private const int RateLimitDelayMs = 100;
     private const string BaseUrl = "https://www.ecfr.gov";
 
-    public EcfrClient(HttpClient httpClient, ILogger<EcfrClient>? logger = null)
+    public EcfrClient(
+        HttpClient httpClient,
+        ITitleCacheService cacheService,
+        ILogger<EcfrClient>? logger = null)
     {
         _httpClient = httpClient;
+        _cacheService = cacheService;
         _logger = logger;
         _httpClient.BaseAddress = new Uri(BaseUrl);
     }
@@ -139,117 +146,137 @@ public class EcfrClient : IEcfrClient
     }
 
     public async Task<AgencyWordCountHistory> GetAgencyWordCountHistoryAsync(
-        string slug, DateTimeOffset startDate, DateTimeOffset endDate, int intervalDays = 90)
+        string agencySlug,
+        DateTimeOffset startDate,
+        DateTimeOffset endDate)
     {
-        if (startDate > endDate)
-        {
-            throw new ArgumentException("Start date must be before end date");
-        }
+        var agency = await GetAgencyBySlugAsync(agencySlug);
+        var titles = await GetAgencyTitlesAsync(agencySlug);
+        
+        _logger?.LogInformation("Processing word counts for agency {Agency} between {StartDate} and {EndDate}", 
+            agency.Name, startDate, endDate);
 
-        var result = await GetAgencyTitlesAsync(slug);
-        var agency = result.Agency;
-        var titles = result.Titles;  
-
-        var history = new AgencyWordCountHistory
-        {
+        var history = new AgencyWordCountHistory 
+        { 
             Agency = agency,
             TitleHistories = new List<TitleWordCountHistory>(),
+            Dates = new List<DateWordCount>(),
             StartDate = startDate,
             EndDate = endDate
         };
 
-        foreach (var title in titles)
+        // Process titles in parallel with a semaphore to control concurrency
+        using var semaphore = new SemaphoreSlim(2);
+        var titleTasks = titles.Titles.Select(async title =>
         {
-            _logger?.LogInformation($"Processing history for Title {title.Number}");
-
-            var titleHistory = new TitleWordCountHistory
+            await semaphore.WaitAsync();
+            try
             {
-                TitleNumber = title.Number,
-                TitleName = title.Name,
-                WordCounts = new List<WordCountSnapshot>()
-            };
-
-            // Calculate dates at regular intervals
-            var currentDate = startDate;
-            DateTimeOffset? previousDate = null;
-            int? previousWordCount = null;
-
-            while (currentDate <= endDate)
-            {
-                try
+                var titleHistory = new TitleWordCountHistory
                 {
-                    var xml = await GetTitleXmlForDateAsync(title.Number, currentDate);
-                    var wordCount = CountWordsInXml(xml);
+                    TitleNumber = title.Number,
+                    TitleName = title.Name,
+                    WordCounts = new List<WordCountSnapshot>()
+                };
 
-                    var snapshot = new WordCountSnapshot
-                    {
-                        Date = currentDate,
-                        WordCount = wordCount,
-                        DaysSinceLastSnapshot = previousDate.HasValue ? intervalDays : 0,
-                        WordsAddedSinceLastSnapshot = previousWordCount.HasValue ? wordCount - previousWordCount.Value : 0
-                    };
+                var dates = GetDateRange(startDate, endDate);
+                var snapshots = await ProcessDatesForTitleConcurrently(title.Number, dates);
+                titleHistory.WordCounts.AddRange(snapshots);
 
-                    // Calculate words per day rate
-                    if (snapshot.DaysSinceLastSnapshot > 0)
-                    {
-                        snapshot.WordsPerDay = (double)snapshot.WordsAddedSinceLastSnapshot / snapshot.DaysSinceLastSnapshot;
-                    }
-
-                    titleHistory.WordCounts.Add(snapshot);
-                    _logger?.LogInformation($"Title {title.Number} at {currentDate:yyyy-MM-dd}: {wordCount:N0} words");
-
-                    previousDate = currentDate;
-                    previousWordCount = wordCount;
-                }
-                catch (Exception ex)
-                {
-                    _logger?.LogWarning(ex, $"Failed to get word count for Title {title.Number} at {currentDate:yyyy-MM-dd}");
-                }
-
-                currentDate = currentDate.AddDays(intervalDays);
+                return (titleHistory, snapshots);
             }
-
-            // Add final snapshot at end date if not already included
-            if (currentDate > endDate && previousDate.HasValue && previousDate.Value < endDate)
+            finally
             {
-                try
-                {
-                    var xml = await GetTitleXmlForDateAsync(title.Number, endDate);
-                    var wordCount = CountWordsInXml(xml);
-
-                    var snapshot = new WordCountSnapshot
-                    {
-                        Date = endDate,
-                        WordCount = wordCount,
-                        DaysSinceLastSnapshot = intervalDays,
-                        WordsAddedSinceLastSnapshot = previousWordCount.HasValue ? wordCount - previousWordCount.Value : 0
-                    };
-
-                    // Calculate words per day rate
-                    if (snapshot.DaysSinceLastSnapshot > 0)
-                    {
-                        snapshot.WordsPerDay = (double)snapshot.WordsAddedSinceLastSnapshot / snapshot.DaysSinceLastSnapshot;
-                    }
-
-                    titleHistory.WordCounts.Add(snapshot);
-                    _logger?.LogInformation($"Title {title.Number} at {endDate:yyyy-MM-dd}: {wordCount:N0} words");
-                }
-                catch (Exception ex)
-                {
-                    _logger?.LogWarning(ex, $"Failed to get word count for Title {title.Number} at {endDate:yyyy-MM-dd}");
-                }
+                semaphore.Release();
             }
+        });
 
-            if (titleHistory.WordCounts.Any())
+        var results = await Task.WhenAll(titleTasks);
+        history.TitleHistories = results.Select(r => r.titleHistory).ToList();
+
+        // Aggregate word counts by date across all titles
+        var dateGroups = results
+            .SelectMany(r => r.snapshots)
+            .GroupBy(s => s.Date)
+            .OrderBy(g => g.Key);
+
+        foreach (var group in dateGroups)
+        {
+            history.Dates.Add(new DateWordCount
             {
-                history.TitleHistories.Add(titleHistory);
+                Date = group.Key,
+                WordCount = group.Sum(s => s.WordCount)
+            });
+        }
+
+        return history;
+    }
+
+    private async Task<List<WordCountSnapshot>> ProcessDatesForTitleConcurrently(
+        int titleNumber,
+        List<DateTimeOffset> dates)
+    {
+        var snapshots = new List<WordCountSnapshot>();
+        using var semaphore = new SemaphoreSlim(3);
+        
+        var tasks = dates.Select(async date =>
+        {
+            await semaphore.WaitAsync();
+            try
+            {
+                // First try to get from cache
+                if (await _cacheService.IsCachedAsync(titleNumber, date))
+                {
+                    var wordCount = await _cacheService.GetWordCountAsync(titleNumber, date);
+                    return new WordCountSnapshot
+                    {
+                        Date = date,
+                        WordCount = wordCount
+                    };
+                }
+
+                // If not in cache, get from API and cache it
+                await Task.Delay(RateLimitDelayMs);
+                var xml = await GetTitleXmlForDateAsync(titleNumber, date);
+                await _cacheService.UpdateTitleCacheAsync(titleNumber, date, xml);
+                
+                return new WordCountSnapshot
+                {
+                    Date = date,
+                    WordCount = CountWordsInXml(xml)
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error processing title {TitleNumber} for date {Date}",
+                    titleNumber, date);
+                return new WordCountSnapshot { Date = date, WordCount = 0 };
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+        });
+
+        var results = await Task.WhenAll(tasks);
+        snapshots.AddRange(results.OrderBy(s => s.Date));
+
+        // Calculate words added since last snapshot
+        for (int i = 1; i < snapshots.Count; i++)
+        {
+            var current = snapshots[i];
+            var previous = snapshots[i - 1];
+            
+            current.WordsAddedSinceLastSnapshot = current.WordCount - previous.WordCount;
+            current.DaysSinceLastSnapshot = (int)(current.Date - previous.Date).TotalDays;
+            
+            if (current.DaysSinceLastSnapshot > 0)
+            {
+                current.WordsPerDay = (double)current.WordsAddedSinceLastSnapshot / current.DaysSinceLastSnapshot;
             }
         }
 
-        _logger?.LogInformation($"Total words added across all titles: {history.TotalWordsAdded:N0}");
-        _logger?.LogInformation($"Average words added per day: {history.AverageWordsPerDay:N0}");
-
-        return history;
+        return snapshots;
     }
 
     internal int CountWordsInXml(string xml)
