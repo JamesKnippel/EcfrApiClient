@@ -1,17 +1,11 @@
 {
-  "/api": {
-    "target": "http://localhost:5217",
-    "secure": false,
-    "logLevel": "debug",
-    "changeOrigin": true
-  },
-  "/api/ecfr/agencies/*": {
+  "/api/ecfr": {
     "target": "http://localhost:5217",
     "secure": false,
     "logLevel": "debug",
     "changeOrigin": true,
     "pathRewrite": {
-      "^/api/ecfr/agencies": "/api/ecfr/agencies"
+      "^/api/ecfr": "/api/ecfr"
     }
   }
 }
