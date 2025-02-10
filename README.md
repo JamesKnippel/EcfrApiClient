@@ -15,7 +15,6 @@ A modern web application that provides a user-friendly interface to access and n
 - **Framework**: Angular 17
 - **Language**: TypeScript
 - **UI Components**: Angular Material
-- **Web Server**: Nginx
 - **Container**: Docker
 
 ### Backend
@@ -27,14 +26,13 @@ A modern web application that provides a user-friendly interface to access and n
 - **Cloud Platform**: Azure Container Apps
 - **Container Registry**: Azure Container Registry
 - **CI/CD**: GitHub Actions
-- **Reverse Proxy**: Nginx
 
 ## Architecture
 
 The application follows a microservices architecture with two main components:
 
 1. **Frontend Service** (`ecfr-client`)
-   - Angular SPA hosted in Nginx
+   - Angular SPA hosted in Azure Web Apps
    - Proxies API requests to the backend service
    - Handles routing and user interface
 
