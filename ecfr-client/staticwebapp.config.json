@@ -8,14 +8,10 @@
       "route": "/app/*",
       "serve": "/index.html",
       "statusCode": 200
-    },
-    {
-      "route": "/api/*",
-      "rewrite": "https://ecfr-app-api.whitemeadow-0306cf91.eastus.azurecontainerapps.io/api/:splat"
     }
   ],
   "globalHeaders": {
-    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://*.azurecontainerapps.io;",
+    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://*.azurecontainerapps.io http://localhost:5217;",
     "X-Frame-Options": "SAMEORIGIN",
     "X-Content-Type-Options": "nosniff"
   }
