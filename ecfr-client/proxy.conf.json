@@ -1,11 +1,11 @@
 {
-  "/api/ecfr": {
+  "/api": {
     "target": "http://localhost:5217",
     "secure": false,
     "logLevel": "debug",
     "changeOrigin": true,
     "pathRewrite": {
-      "^/api/ecfr": "/api/ecfr"
+      "^/api": "/api"
     }
   }
 }
