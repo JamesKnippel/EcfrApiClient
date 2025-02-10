@@ -163,37 +163,31 @@ jobs:
       uses: azure/container-apps-deploy-action@v1
       with:
         acrName: ${{ env.REGISTRY_NAME }}
+        acrUsername: ${{ secrets.REGISTRY_USERNAME }}
+        acrPassword: ${{ secrets.REGISTRY_PASSWORD }}
         containerAppName: ${{ env.AZURE_WEBAPP_NAME }}-api
         resourceGroup: ${{ secrets.AZURE_RESOURCE_GROUP }}
         containerAppEnvironment: ecfr-env
         targetPort: 80
         ingress: external
         location: eastus
-        image: ${{ needs.build-and-push-images.outputs.api_image }}
-        cpu: 0.5
-        memory: 1Gi
-        minReplicas: 1
-        maxReplicas: 3
-        env: |
-          - name: ASPNETCORE_ENVIRONMENT
-            value: Production
+        imageToDeploy: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.API_IMAGE_NAME }}:${{ github.sha }}
+        environmentVariables: |
+          ASPNETCORE_ENVIRONMENT=Production
 
     - name: Deploy Client to Azure Container App
       if: ${{ github.event_name == 'push' || github.event.inputs.deploy_client == 'true' }}
       uses: azure/container-apps-deploy-action@v1
       with:
         acrName: ${{ env.REGISTRY_NAME }}
+        acrUsername: ${{ secrets.REGISTRY_USERNAME }}
+        acrPassword: ${{ secrets.REGISTRY_PASSWORD }}
         containerAppName: ${{ env.AZURE_WEBAPP_NAME }}-client
         resourceGroup: ${{ secrets.AZURE_RESOURCE_GROUP }}
         containerAppEnvironment: ecfr-env
         targetPort: 80
         ingress: external
         location: eastus
-        image: ${{ needs.build-and-push-images.outputs.client_image }}
-        cpu: 0.5
-        memory: 1Gi
-        minReplicas: 1
-        maxReplicas: 3
-        env: |
-          - name: API_HOST
-            value: ${{ env.AZURE_WEBAPP_NAME }}-api.azurecontainerapps.io
+        imageToDeploy: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.CLIENT_IMAGE_NAME }}:${{ github.sha }}
+        environmentVariables: |
+          API_HOST=${{ env.AZURE_WEBAPP_NAME }}-api.azurecontainerapps.io
