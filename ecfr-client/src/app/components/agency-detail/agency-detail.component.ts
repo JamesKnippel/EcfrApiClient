@@ -273,7 +273,7 @@ export class AgencyDetailComponent implements OnInit, OnDestroy, OnChanges, Afte
 
   private getSavedDates(): { start: Date; end: Date } {
     const defaultDates = {
-      start: new Date('2017-01-01'),
+      start: new Date('2024-01-01'),
       end: new Date('2025-02-06')
     };
 
