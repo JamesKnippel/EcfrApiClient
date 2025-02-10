@@ -27,24 +27,26 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// Get base path from environment variable
+var basePath = Environment.GetEnvironmentVariable("ASPNETCORE_BASEPATH") ?? "";
+
+// Configure the HTTP request pipeline.
 app.UseSwagger();
 app.UseSwaggerUI();
 
 // Use CORS before routing
 app.UseCors();
 
-app.UseHttpsRedirection();
+// Use routing and endpoints
+app.UseRouting();
 app.UseAuthorization();
 
-// Serve static files from wwwroot
-app.UseDefaultFiles();
-app.UseStaticFiles();
+if (!string.IsNullOrEmpty(basePath))
+{
+    app.UsePathBase(basePath);
+}
 
-// Map controllers
 app.MapControllers();
 app.MapHealthChecks("/health");
-
-// Fallback to index.html for SPA routes
-app.MapFallbackToFile("index.html");
 
 app.Run();

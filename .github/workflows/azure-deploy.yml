@@ -190,4 +190,4 @@ jobs:
         location: eastus
         imageToDeploy: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.CLIENT_IMAGE_NAME }}:${{ github.sha }}
         environmentVariables: |
-          API_HOST=${{ env.AZURE_WEBAPP_NAME }}-api.azurecontainerapps.io
+          API_HOST=ecfr-app-api.whitemeadow-0306cf91.eastus.azurecontainerapps.io
