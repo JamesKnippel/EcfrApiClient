@@ -29,19 +29,26 @@ public class TitleCacheService : ITitleCacheService
 
     public async Task<int> GetWordCountAsync(int titleNumber, DateTimeOffset date)
     {
-        var cached = await _context.TitleWordCounts
-            .FirstOrDefaultAsync(t => t.TitleNumber == titleNumber && t.Date.Date == date.Date);
+        var targetDate = date.Date;
+        
+        // Get all relevant entries and evaluate in memory
+        var entries = await _context.TitleWordCounts
+            .Where(t => t.TitleNumber == titleNumber)
+            .AsNoTracking()
+            .ToListAsync();
 
-        if (cached != null)
+        // Try to find exact date match
+        var exactMatch = entries.FirstOrDefault(t => t.Date.Date == targetDate);
+        if (exactMatch != null)
         {
-            return cached.WordCount;
+            return exactMatch.WordCount;
         }
 
-        // If we don't have the exact date, try to find the closest previous date
-        var closestPrevious = await _context.TitleWordCounts
-            .Where(t => t.TitleNumber == titleNumber && t.Date.Date <= date.Date)
+        // If no exact match, find closest previous date
+        var closestPrevious = entries
+            .Where(t => t.Date.Date <= targetDate)
             .OrderByDescending(t => t.Date)
-            .FirstOrDefaultAsync();
+            .FirstOrDefault();
 
         return closestPrevious?.WordCount ?? 0;
     }
@@ -50,10 +57,15 @@ public class TitleCacheService : ITitleCacheService
     {
         var checksum = ComputeChecksum(xmlContent);
         var wordCount = CountWordsInXml(xmlContent);
+        var targetDate = date.Date;
 
         // Update or create TitleVersionCache
-        var existingVersion = await _context.TitleVersions
-            .FirstOrDefaultAsync(t => t.TitleNumber == titleNumber && t.IssueDate.Date == date.Date);
+        var existingVersions = await _context.TitleVersions
+            .Where(t => t.TitleNumber == titleNumber)
+            .AsNoTracking()
+            .ToListAsync();
+
+        var existingVersion = existingVersions.FirstOrDefault(t => t.IssueDate.Date == targetDate);
 
         if (existingVersion != null)
         {
@@ -63,6 +75,7 @@ public class TitleCacheService : ITitleCacheService
                 existingVersion.WordCount = wordCount;
                 existingVersion.Checksum = checksum;
                 existingVersion.LastUpdated = DateTimeOffset.UtcNow;
+                _context.TitleVersions.Update(existingVersion);
             }
         }
         else
@@ -79,13 +92,18 @@ public class TitleCacheService : ITitleCacheService
         }
 
         // Update or create TitleWordCountCache
-        var existingWordCount = await _context.TitleWordCounts
-            .FirstOrDefaultAsync(t => t.TitleNumber == titleNumber && t.Date.Date == date.Date);
+        var existingWordCounts = await _context.TitleWordCounts
+            .Where(t => t.TitleNumber == titleNumber)
+            .AsNoTracking()
+            .ToListAsync();
+
+        var existingWordCount = existingWordCounts.FirstOrDefault(t => t.Date.Date == targetDate);
 
         if (existingWordCount != null)
         {
             existingWordCount.WordCount = wordCount;
             existingWordCount.LastUpdated = DateTimeOffset.UtcNow;
+            _context.TitleWordCounts.Update(existingWordCount);
         }
         else
         {
@@ -103,8 +121,23 @@ public class TitleCacheService : ITitleCacheService
 
     public async Task<bool> IsCachedAsync(int titleNumber, DateTimeOffset date)
     {
-        return await _context.TitleWordCounts
-            .AnyAsync(t => t.TitleNumber == titleNumber && t.Date.Date == date.Date);
+        // Convert input date to a comparable format
+        var targetDate = date.Date;
+        
+        // Get all relevant entries and evaluate in memory
+        var entries = await _context.TitleWordCounts
+            .Where(t => t.TitleNumber == titleNumber)
+            .AsNoTracking()
+            .ToListAsync();
+
+        // Check for exact date match
+        if (entries.Any(t => t.Date.Date == targetDate))
+        {
+            return true;
+        }
+
+        // Check for any previous date
+        return entries.Any(t => t.Date.Date <= targetDate);
     }
 
     private string ComputeChecksum(string content)

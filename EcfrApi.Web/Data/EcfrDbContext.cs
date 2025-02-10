@@ -5,7 +5,8 @@ namespace EcfrApi.Web.Data;
 
 public class EcfrDbContext : DbContext
 {
-    public EcfrDbContext(DbContextOptions<EcfrDbContext> options) : base(options)
+    public EcfrDbContext(DbContextOptions<EcfrDbContext> options)
+        : base(options)
     {
     }
 
@@ -14,12 +15,10 @@ public class EcfrDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        // Configure TitleVersionCache
         modelBuilder.Entity<TitleVersionCache>()
             .HasIndex(t => new { t.TitleNumber, t.IssueDate })
             .IsUnique();
 
-        // Configure TitleWordCountCache
         modelBuilder.Entity<TitleWordCountCache>()
             .HasIndex(t => new { t.TitleNumber, t.Date })
             .IsUnique();

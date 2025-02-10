@@ -1,6 +1,7 @@
 using EcfrApi.Web.Services;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.EntityFrameworkCore;
+using EcfrApi.Web.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
