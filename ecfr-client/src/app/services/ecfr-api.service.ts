@@ -104,22 +104,22 @@ export class EcfrApiService {
   }
 
   getTitles(): Observable<TitlesResponse> {
-    const url = `${this.baseUrl}/ecfr/titles`;
+    const url = `${this.baseUrl}/api/ecfr/titles`;
     return this.cacheRequest<TitlesResponse>('titles', this.http.get<TitlesResponse>(url));
   }
 
   getAgencies(): Observable<AgenciesResponse> {
-    const url = `${this.baseUrl}/ecfr/agencies`;
+    const url = `${this.baseUrl}/api/ecfr/agencies`;
     return this.cacheRequest<AgenciesResponse>('agencies', this.http.get<AgenciesResponse>(url));
   }
 
   getAgencyBySlug(slug: string): Observable<Agency> {
-    const url = `${this.baseUrl}/ecfr/agencies/${slug}`;
+    const url = `${this.baseUrl}/api/ecfr/agencies/${slug}`;
     return this.cacheRequest<Agency>(`agency-${slug}`, this.http.get<Agency>(url));
   }
 
   getAgencyTitles(slug: string): Observable<AgencyTitlesResult> {
-    const url = `${this.baseUrl}/ecfr/agencies/${slug}/titles`;
+    const url = `${this.baseUrl}/api/ecfr/agencies/${slug}/titles`;
     return this.cacheRequest<AgencyTitlesResult>(
       `agency-titles-${slug}`,
       this.http.get<AgencyTitlesResult>(url)
@@ -127,7 +127,7 @@ export class EcfrApiService {
   }
 
   getTitleXml(titleNumber: number): Observable<string> {
-    const url = `${this.baseUrl}/ecfr/titles/${titleNumber}/xml`;
+    const url = `${this.baseUrl}/api/ecfr/titles/${titleNumber}/xml`;
     return this.http.get(url, { responseType: 'text' });
   }
 
@@ -144,7 +144,7 @@ export class EcfrApiService {
       params = params.set('endDate', endDate.toISOString());
     }
 
-    const url = `${this.baseUrl}/ecfr/agencies/${slug}/word-count-history`;
+    const url = `${this.baseUrl}/api/ecfr/agencies/${slug}/word-count-history`;
     return this.http.get<AgencyWordCountHistory>(url, { params });
   }
 }
