@@ -1,25 +1,17 @@
 using EcfrApi.Web.Models;
 using EcfrApi.Web.Services;
 using FluentAssertions;
-using Microsoft.Extensions.Logging;
-using Moq;
-using System.Net.Http;
 using Xunit;
 
 namespace EcfrApi.Tests.Unit;
 
 public class WordCountTests
 {
-    private readonly IEcfrClient _client;
-    private readonly Mock<ITitleCacheService> _mockCacheService;
-    private readonly Mock<ILogger<EcfrClient>> _mockLogger;
+    private readonly EcfrClient _client;
 
     public WordCountTests()
     {
-        _mockCacheService = new Mock<ITitleCacheService>();
-        _mockLogger = new Mock<ILogger<EcfrClient>>();
-        var httpClient = new HttpClient();
-        _client = new EcfrClient(httpClient, _mockCacheService.Object, _mockLogger.Object);
+        _client = new EcfrClient(new HttpClient());
     }
 
     [Fact]
@@ -70,20 +62,20 @@ public class WordCountTests
     }
 
     [Fact]
-    public async Task CountWordsInXml_WithSimpleXml_ShouldCountWords()
+    public void CountWordsInXml_WithSimpleXml_ShouldCountWords()
     {
         // Arrange
         var xml = "<root>This is a test</root>";
 
         // Act
-        var wordCount = await _client.CountWordsInXml(xml);
+        var wordCount = _client.CountWordsInXml(xml);
 
         // Assert
         wordCount.Should().Be(4);
     }
 
     [Fact]
-    public async Task CountWordsInXml_WithNestedXml_ShouldCountWords()
+    public void CountWordsInXml_WithNestedXml_ShouldCountWords()
     {
         // Arrange
         var xml = @"
@@ -94,14 +86,14 @@ public class WordCountTests
             </root>";
 
         // Act
-        var wordCount = await _client.CountWordsInXml(xml);
+        var wordCount = _client.CountWordsInXml(xml);
 
         // Assert
         wordCount.Should().Be(6);
     }
 
     [Fact]
-    public async Task CountWordsInXml_WithAttributes_ShouldIgnoreAttributes()
+    public void CountWordsInXml_WithAttributes_ShouldIgnoreAttributes()
     {
         // Arrange
         var xml = @"
@@ -111,7 +103,7 @@ public class WordCountTests
             </root>";
 
         // Act
-        var wordCount = await _client.CountWordsInXml(xml);
+        var wordCount = _client.CountWordsInXml(xml);
 
         // Assert
         wordCount.Should().Be(6);
