@@ -97,7 +97,16 @@ public class EcfrClient : IEcfrClient
     public async Task<AgencyTitlesResult> GetAgencyTitlesAsync(string slug)
     {
         var agency = await GetAgencyBySlugAsync(slug);
+        if (agency == null)
+        {
+            throw new ArgumentException($"Agency with slug '{slug}' not found");
+        }
+
         var allTitles = await GetTitlesAsync();
+        if (allTitles?.Titles == null)
+        {
+            throw new InvalidOperationException("Failed to retrieve titles from eCFR API");
+        }
         
         // Get distinct title numbers from agency and all its children
         var allTitleNumbers = new HashSet<int>();
@@ -161,6 +170,11 @@ public class EcfrClient : IEcfrClient
         }
 
         var agency = await GetAgencyBySlugAsync(agencySlug);
+        if (agency == null)
+        {
+            throw new ArgumentException($"Agency with slug '{agencySlug}' not found");
+        }
+
         var history = new AgencyWordCountHistory
         { 
             Agency = agency,
@@ -169,8 +183,8 @@ public class EcfrClient : IEcfrClient
             EndDate = endDate
         };
 
-        var titles = await GetAgencyTitlesAsync(agencySlug);
-        if (titles?.Titles == null || !titles.Titles.Any())
+        var agencyTitles = await GetAgencyTitlesAsync(agencySlug);
+        if (agencyTitles?.Titles == null || !agencyTitles.Titles.Any())
         {
             _logger?.LogWarning("No titles found for agency {AgencySlug}", agencySlug);
             return history;
@@ -178,20 +192,19 @@ public class EcfrClient : IEcfrClient
         
         // Process titles in parallel with rate limiting
         using var semaphore = new SemaphoreSlim(3); // Allow 3 concurrent requests
-        var titleTasks = titles.Titles.Select(async title =>
+        var titleTasks = agencyTitles.Titles.Select(async title =>
         {
             await semaphore.WaitAsync();
             try
             {
-                // Get all issue dates within the range
-                var issueDates = new List<DateTimeOffset>();
+                // Get weekly snapshots within the range
+                var issueDates = GetDateRangeList(startDate, endDate);
+                
+                // Get the latest issue date
                 if (!string.IsNullOrEmpty(title.LatestIssueDate))
                 {
                     var latestDate = DateTimeOffset.Parse(title.LatestIssueDate);
-                    if (latestDate >= startDate && latestDate <= endDate)
-                    {
-                        issueDates.Add(latestDate);
-                    }
+                    issueDates = issueDates.Where(d => d <= latestDate).ToList();
                 }
 
                 if (!issueDates.Any())
@@ -207,36 +220,45 @@ public class EcfrClient : IEcfrClient
                     WordCounts = new List<WordCountSnapshot>()
                 };
 
-                foreach (var issueDate in issueDates)
+                WordCountSnapshot? lastSnapshot = null;
+                foreach (var issueDate in issueDates.OrderBy(d => d))
                 {
                     try
                     {
+                        int wordCount;
                         // First check cache
                         if (await _cacheService.IsCachedAsync(title.Number, issueDate))
                         {
-                            var wordCount = await _cacheService.GetWordCountAsync(title.Number, issueDate);
-                            titleHistory.WordCounts.Add(new WordCountSnapshot
-                            {
-                                Date = issueDate,
-                                WordCount = wordCount
-                            });
+                            wordCount = await _cacheService.GetWordCountAsync(title.Number, issueDate);
                         }
                         else
                         {
                             // Get from API and cache
                             await Task.Delay(RateLimitDelayMs);
                             var xml = await GetTitleXmlForDateAsync(title.Number, issueDate);
-                            var wordCount = await CountWordsInXml(xml);
+                            wordCount = await CountWordsInXml(xml);
                             
                             // Cache the result
                             await _cacheService.UpdateTitleCacheAsync(title.Number, issueDate, xml);
-                            
-                            titleHistory.WordCounts.Add(new WordCountSnapshot
-                            {
-                                Date = issueDate,
-                                WordCount = wordCount
-                            });
                         }
+
+                        var snapshot = new WordCountSnapshot
+                        {
+                            Date = issueDate,
+                            WordCount = wordCount
+                        };
+                        
+                        if (lastSnapshot != null)
+                        {
+                            // Calculate rate metrics
+                            var daysSinceLastSnapshot = Math.Max(1, (int)(snapshot.Date - lastSnapshot.Date).TotalDays);
+                            snapshot.DaysSinceLastSnapshot = daysSinceLastSnapshot;
+                            snapshot.WordsAddedSinceLastSnapshot = snapshot.WordCount - lastSnapshot.WordCount;
+                            snapshot.WordsPerDay = (double)snapshot.WordsAddedSinceLastSnapshot / daysSinceLastSnapshot;
+                        }
+                        
+                        titleHistory.WordCounts.Add(snapshot);
+                        lastSnapshot = snapshot;
                     }
                     catch (Exception ex)
                     {
@@ -245,6 +267,7 @@ public class EcfrClient : IEcfrClient
                     }
                 }
 
+                // Only return history if we have at least one valid word count
                 return titleHistory.WordCounts.Any() ? titleHistory : null;
             }
             finally
@@ -255,6 +278,12 @@ public class EcfrClient : IEcfrClient
 
         var histories = await Task.WhenAll(titleTasks);
         history.TitleHistories = histories.Where(h => h != null).ToList()!;
+        
+        // Sort titles by number for consistent ordering
+        history.TitleHistories = history.TitleHistories
+            .OrderBy(h => h.TitleNumber)
+            .ToList();
+            
         return history;
     }
 
@@ -262,12 +291,21 @@ public class EcfrClient : IEcfrClient
     {
         var dates = new List<DateTimeOffset>();
         var current = start;
+        
+        // Get weekly snapshots
         while (current <= end)
         {
             dates.Add(current);
-            current = current.AddDays(1);
+            current = current.AddDays(7); // Weekly intervals
         }
-        return dates;
+        
+        // Always include the end date if it's not already included
+        if (!dates.Contains(end))
+        {
+            dates.Add(end);
+        }
+        
+        return dates.OrderBy(d => d).ToList();
     }
 
     public async Task<int> CountWordsInXml(string xml)
