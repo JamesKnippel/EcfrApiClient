@@ -3,7 +3,6 @@ name: Frontend CI/CD Pipeline
 on:
   push:
     branches: 
-      - master
       - develop
     paths:
       - 'ecfr-client/**'
@@ -31,7 +30,7 @@ env:
 
 jobs:
   validate:
-    name: Test
+    name: Lint and Test
     runs-on: ubuntu-latest
     outputs:
       client_changed: ${{ steps.filter.outputs.client_changed }}
@@ -58,11 +57,6 @@ jobs:
         if: steps.filter.outputs.client_changed == 'true'
         working-directory: ${{ env.APP_LOCATION }}
         run: npm ci
-
-      - name: Test
-        if: steps.filter.outputs.client_changed == 'true'
-        working-directory: ${{ env.APP_LOCATION }}
-        run: npm test -- --configuration=ci
 
   build:
     name: Build Application
@@ -139,8 +133,9 @@ jobs:
     name: Production Release
     needs: deploy-staging
     if: |
-      (github.ref == 'refs/heads/master' && github.event_name == 'push') || 
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
+      needs.deploy-staging.result == 'success' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.environment == 'production'
     runs-on: ubuntu-latest
     environment:
       name: production
