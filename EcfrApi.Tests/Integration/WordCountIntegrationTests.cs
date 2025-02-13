@@ -1,7 +1,9 @@
 using EcfrApi.Web.Services;
 using EcfrApi.Web.Models;
+using EcfrApi.Web.Data;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore;
 using System.Text;
 using Xunit;
 using Xunit.Abstractions;
@@ -18,6 +20,9 @@ public class WordCountIntegrationTests
     {
         _output = output;
         var services = new ServiceCollection();
+        services.AddDbContext<EcfrApi.Web.Data.EcfrDbContext>(options => 
+            options.UseInMemoryDatabase("TestDb"));
+        services.AddScoped<ITitleCacheService, TitleCacheService>();
         services.AddHttpClient<IEcfrClient, EcfrClient>();
         var provider = services.BuildServiceProvider();
         _client = provider.GetRequiredService<IEcfrClient>();
@@ -124,8 +129,8 @@ public class WordCountIntegrationTests
         var invalidSlug = "invalid-agency-slug";
 
         // Act & Assert
-        await _client.Invoking(c => c.GetAgencyTitlesWithWordCountAsync(invalidSlug))
-            .Should().ThrowAsync<ArgumentException>()
-            .WithMessage($"Agency with slug '{invalidSlug}' not found");
+        Func<Task> func = async () => await _client.GetAgencyTitlesWithWordCountAsync(invalidSlug);
+        await func.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*Agency with slug 'invalid-agency-slug' not found*");
     }
 }
