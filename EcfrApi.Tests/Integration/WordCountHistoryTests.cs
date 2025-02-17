@@ -138,7 +138,8 @@ public class WordCountHistoryTests
         // Act & Assert
         await _client.Invoking(c => c.GetAgencyWordCountHistoryAsync(invalidSlug, startDate, endDate))
             .Should().ThrowAsync<ArgumentException>()
-            .WithMessage("*Agency with slug 'invalid-agency-slug' not found*");
+            .WithMessage("*Agency with slug 'invalid-agency-slug' not found*")
+            .Where(ex => ex.Message.Contains("Please use one of the following slugs:"));
     }
 
     [Fact]
