@@ -87,12 +87,7 @@ interface ChartDataPoint {
       </mat-card>
       
       <div class="content">
-        <div *ngIf="loading" class="loading-container">
-          <mat-spinner></mat-spinner>
-          <p>Loading word count history...</p>
-        </div>
-
-        <mat-card class="references-card" [class.hidden]="loading">
+        <mat-card class="references-card">
           <mat-card-header>
             <mat-card-title>CFR References</mat-card-title>
           </mat-card-header>
@@ -105,12 +100,15 @@ interface ChartDataPoint {
           </mat-card-content>
         </mat-card>
 
-        <mat-card class="stats-card" [class.hidden]="loading">
+        <mat-card class="stats-card">
           <mat-card-header>
             <mat-card-title>Word Count Statistics</mat-card-title>
           </mat-card-header>
           <mat-card-content>
-            <div class="stats-grid" *ngIf="wordCountHistory">
+            <div *ngIf="loading" class="loading-container">
+              <mat-spinner diameter="40"></mat-spinner>
+            </div>
+            <div class="stats-grid" *ngIf="!loading && wordCountHistory">
               <div class="stat-item">
                 <div class="stat-label">Total Words</div>
                 <div class="stat-value">{{ getCurrentTotalWordCount() | number }}</div>
@@ -131,21 +129,27 @@ interface ChartDataPoint {
           </mat-card-content>
         </mat-card>
 
-        <mat-card class="word-count-card" [class.hidden]="loading">
+        <mat-card class="word-count-card">
           <mat-card-header>
             <mat-card-title>Current Word Counts by Title</mat-card-title>
           </mat-card-header>
           <mat-card-content>
-            <canvas #wordCountChart></canvas>
+            <div *ngIf="loading" class="loading-container">
+              <mat-spinner diameter="40"></mat-spinner>
+            </div>
+            <canvas #wordCountChart *ngIf="!loading"></canvas>
           </mat-card-content>
         </mat-card>
 
-        <mat-card class="rate-card" [class.hidden]="loading">
+        <mat-card class="rate-card">
           <mat-card-header>
             <mat-card-title>Word Count Changes Over Time</mat-card-title>
           </mat-card-header>
           <mat-card-content>
-            <canvas #rateChart></canvas>
+            <div *ngIf="loading" class="loading-container">
+              <mat-spinner diameter="40"></mat-spinner>
+            </div>
+            <canvas #rateChart *ngIf="!loading"></canvas>
           </mat-card-content>
         </mat-card>
       </div>
@@ -185,14 +189,9 @@ interface ChartDataPoint {
     
     .loading-container {
       display: flex;
-      flex-direction: column;
-      align-items: center;
       justify-content: center;
+      align-items: center;
       min-height: 200px;
-    }
-    
-    .hidden {
-      display: none;
     }
     
     mat-card {

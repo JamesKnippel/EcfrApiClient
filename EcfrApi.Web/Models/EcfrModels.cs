@@ -110,7 +110,7 @@ public class TitleWordCountHistory
             
     public double AverageWordsPerDay =>
         WordCounts.Count > 0
-            ? TotalWordsAdded
+            ? (double)TotalWordsAdded / (WordCounts[^1].Date - WordCounts[0].Date).TotalDays
             : 0;
 }
 
@@ -132,5 +132,8 @@ public class AgencyWordCountHistory
     public DateTimeOffset EndDate { get; set; }
     
     public int TotalWordsAdded => TitleHistories.Sum(t => t.TotalWordsAdded);
-    public double AverageWordsPerDay => TitleHistories.Sum(t => t.AverageWordsPerDay);
+    public double AverageWordsPerDay => 
+        (EndDate - StartDate).TotalDays > 0 
+            ? (double)TotalWordsAdded / (EndDate - StartDate).TotalDays 
+            : 0;
 }
