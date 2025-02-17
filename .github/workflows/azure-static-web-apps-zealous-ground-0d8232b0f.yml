@@ -6,11 +6,12 @@ on:
       - develop
     paths:
       - 'ecfr-client/**'
-      - '.github/workflows/frontend-pipeline.yml'
+      - '.github/workflows/azure-static-web-apps-zealous-ground-0d8232b0f.yml'
   pull_request:
     branches: [ master, develop ]
     paths:
       - 'ecfr-client/**'
+      - '.github/workflows/azure-static-web-apps-zealous-ground-0d8232b0f.yml'
   workflow_dispatch:
     inputs:
       environment:
