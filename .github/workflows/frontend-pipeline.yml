@@ -26,7 +26,7 @@ env:
   NODE_VERSION: '20.x'
   APP_LOCATION: './ecfr-client'
   OUTPUT_LOCATION: './ecfr-client/dist/ecfr-client/browser'
-  AZURE_STATIC_WEB_APPS_API_TOKEN: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+  AZURE_STATIC_WEB_APPS_API_TOKEN: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_ZEALOUS_GROUND_0D8232B0F }}
 
 jobs:
   validate:
@@ -110,7 +110,7 @@ jobs:
         id: deploy
         uses: Azure/static-web-apps-deploy@v1
         with:
-          azure_static_web_apps_api_token: ${{ env.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_ZEALOUS_GROUND_0D8232B0F }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: "upload"
           app_location: ${{ env.OUTPUT_LOCATION }}
@@ -122,12 +122,34 @@ jobs:
           echo "Waiting for deployment to stabilize..."
           sleep 30
           
-          response=$(curl -s -o /dev/null -w "%{http_code}" ${{ steps.deploy.outputs.url }})
-          if [ $response -ne 200 ]; then
-            echo "❌ Staging deployment verification failed: $response"
-            exit 1
-          fi
-          echo "✅ Staging deployment verified"
+          # Try health check multiple times
+          max_attempts=5
+          attempt=1
+          while [ $attempt -le $max_attempts ]; do
+            echo "Attempt $attempt of $max_attempts..."
+            
+            full_response=$(curl -s -i ${{ steps.deploy.outputs.url }})
+            status_code=$(echo "$full_response" | grep HTTP | awk '{print $2}')
+            
+            if [ "$status_code" = "200" ]; then
+              echo " Deployment verified successfully"
+              exit 0
+            else
+              echo "Attempt $attempt failed with status: $status_code"
+              echo "Response:"
+              echo "$full_response"
+              
+              if [ $attempt -lt $max_attempts ]; then
+                echo "Waiting 30 seconds before next attempt..."
+                sleep 30
+              fi
+            fi
+            
+            attempt=$((attempt + 1))
+          done
+          
+          echo " Deployment verification failed after $max_attempts attempts"
+          exit 1
 
   deploy-production:
     name: Production Release
@@ -151,7 +173,7 @@ jobs:
         id: deploy
         uses: Azure/static-web-apps-deploy@v1
         with:
-          azure_static_web_apps_api_token: ${{ env.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_ZEALOUS_GROUND_0D8232B0F }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: "upload"
           app_location: ${{ env.OUTPUT_LOCATION }}
@@ -163,9 +185,31 @@ jobs:
           echo "Waiting for deployment to stabilize..."
           sleep 30
           
-          response=$(curl -s -o /dev/null -w "%{http_code}" ${{ steps.deploy.outputs.url }})
-          if [ $response -ne 200 ]; then
-            echo "❌ Production deployment verification failed: $response"
-            exit 1
-          fi
-          echo "✅ Production deployment verified"
+          # Try health check multiple times
+          max_attempts=5
+          attempt=1
+          while [ $attempt -le $max_attempts ]; do
+            echo "Attempt $attempt of $max_attempts..."
+            
+            full_response=$(curl -s -i ${{ steps.deploy.outputs.url }})
+            status_code=$(echo "$full_response" | grep HTTP | awk '{print $2}')
+            
+            if [ "$status_code" = "200" ]; then
+              echo " Deployment verified successfully"
+              exit 0
+            else
+              echo "Attempt $attempt failed with status: $status_code"
+              echo "Response:"
+              echo "$full_response"
+              
+              if [ $attempt -lt $max_attempts ]; then
+                echo "Waiting 30 seconds before next attempt..."
+                sleep 30
+              fi
+            fi
+            
+            attempt=$((attempt + 1))
+          done
+          
+          echo " Deployment verification failed after $max_attempts attempts"
+          exit 1
