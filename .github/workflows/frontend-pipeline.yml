@@ -117,8 +117,8 @@ jobs:
         id: idtoken
         with:
           script: |
-            const core = require('@actions/core')
-            return await core.getIDToken()
+            const actionsCore = require('@actions/core')
+            return await actionsCore.getIDToken()
           result-encoding: string
 
       - name: Deploy to Staging
@@ -198,8 +198,8 @@ jobs:
         id: idtoken
         with:
           script: |
-            const core = require('@actions/core')
-            return await core.getIDToken()
+            const actionsCore = require('@actions/core')
+            return await actionsCore.getIDToken()
           result-encoding: string
 
       - name: Deploy to Production
