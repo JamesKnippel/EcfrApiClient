@@ -147,10 +147,37 @@ public class EcfrClient : IEcfrClient
         foreach (var title in result.Titles)
         {
             _logger?.LogInformation("Processing Title {TitleNumber}...", title.Number);
-            var xml = await GetTitleXmlAsync(title.Number);
-            title.WordCount = await CountWordsInXml(xml);
-            _logger?.LogInformation("Title {TitleNumber} has {WordCount:N0} words", 
-                title.Number, title.WordCount);
+            
+            // Parse the latest issue date
+            if (!string.IsNullOrEmpty(title.LatestAmendedOn))
+            {
+                var issueDate = DateTimeOffset.Parse(title.LatestAmendedOn);
+                
+                // Check cache first
+                if (await _cacheService.IsCachedAsync(title.Number, issueDate))
+                {
+                    title.WordCount = await _cacheService.GetWordCountAsync(title.Number, issueDate);
+                    _logger?.LogInformation("Retrieved Title {TitleNumber} word count from cache: {WordCount:N0}", 
+                        title.Number, title.WordCount);
+                }
+                else
+                {
+                    // Get from API and cache if not found
+                    var xml = await GetTitleXmlAsync(title.Number);
+                    title.WordCount = await CountWordsInXml(xml);
+                    await _cacheService.UpdateTitleCacheAsync(title.Number, issueDate, xml);
+                    _logger?.LogInformation("Cached new word count for Title {TitleNumber}: {WordCount:N0}", 
+                        title.Number, title.WordCount);
+                }
+            }
+            else
+            {
+                // Fallback to direct API call if no issue date
+                var xml = await GetTitleXmlAsync(title.Number);
+                title.WordCount = await CountWordsInXml(xml);
+                _logger?.LogInformation("Title {TitleNumber} has {WordCount:N0} words (no issue date)", 
+                    title.Number, title.WordCount);
+            }
         }
         
         _logger?.LogInformation("Total word count for {AgencyName}: {TotalWords:N0}", 
