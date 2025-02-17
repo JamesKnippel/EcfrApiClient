@@ -74,7 +74,12 @@ jobs:
 
       - name: Build
         working-directory: ./ecfr-client
-        run: npm run build -- --configuration production
+        run: |
+          if [ "${{ github.event.inputs.environment }}" = "production" ]; then
+            npm run build -- --configuration production
+          else
+            npm run build -- --configuration staging
+          fi
 
       - name: Copy config file
         run: |
