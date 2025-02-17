@@ -22,12 +22,6 @@ on:
         default: 'staging'
         required: true
 
-env:
-  NODE_VERSION: '20.x'
-  APP_LOCATION: './ecfr-client'
-  OUTPUT_LOCATION: './ecfr-client/dist/ecfr-client/browser'
-  AZURE_STATIC_WEB_APPS_API_TOKEN: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
-
 jobs:
   validate:
     name: Lint and Test
@@ -49,13 +43,13 @@ jobs:
         if: steps.filter.outputs.client_changed == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: '20.x'
           cache: 'npm'
-          cache-dependency-path: '${{ env.APP_LOCATION }}/package-lock.json'
+          cache-dependency-path: './ecfr-client/package-lock.json'
 
       - name: Install Dependencies
         if: steps.filter.outputs.client_changed == 'true'
-        working-directory: ${{ env.APP_LOCATION }}
+        working-directory: ./ecfr-client
         run: npm ci
 
   build:
@@ -69,9 +63,9 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: '20.x'
           cache: 'npm'
-          cache-dependency-path: '${{ env.APP_LOCATION }}/package-lock.json'
+          cache-dependency-path: './ecfr-client/package-lock.json'
 
       - name: Install Dependencies
         working-directory: ./ecfr-client
@@ -81,11 +75,15 @@ jobs:
         working-directory: ./ecfr-client
         run: npm run build -- --configuration production
 
+      - name: Copy config file
+        run: |
+          cp ./ecfr-client/staticwebapp.config.json ./ecfr-client/dist/ecfr-client/browser/
+
       - name: Upload Build
         uses: actions/upload-artifact@v4
         with:
           name: app-build
-          path: ${{ env.OUTPUT_LOCATION }}
+          path: ./ecfr-client/dist/ecfr-client/browser
           retention-days: 1
 
   deploy-staging:
@@ -107,7 +105,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: app-build
-          path: ${{ env.OUTPUT_LOCATION }}
+          path: ./ecfr-client/dist/ecfr-client/browser
 
       - name: Install OIDC Client
         run: npm install @actions/core@1.6.0 @actions/http-client
@@ -125,10 +123,10 @@ jobs:
         id: deploy
         uses: Azure/static-web-apps-deploy@v1
         with:
-          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_ZEALOUS_GROUND_0D8232B0F }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: "upload"
-          app_location: "ecfr-client/dist/ecfr-client/browser"
+          app_location: "./ecfr-client/dist/ecfr-client/browser"
           api_location: ""
           output_location: ""
           skip_app_build: true
@@ -140,7 +138,6 @@ jobs:
           echo "Waiting for deployment to stabilize..."
           sleep 30
           
-          # Try health check multiple times
           max_attempts=5
           attempt=1
           while [ $attempt -le $max_attempts ]; do
@@ -188,7 +185,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: app-build
-          path: ${{ env.OUTPUT_LOCATION }}
+          path: ./ecfr-client/dist/ecfr-client/browser
 
       - name: Install OIDC Client
         run: npm install @actions/core@1.6.0 @actions/http-client
@@ -206,10 +203,10 @@ jobs:
         id: deploy
         uses: Azure/static-web-apps-deploy@v1
         with:
-          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_ZEALOUS_GROUND_0D8232B0F }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: "upload"
-          app_location: "ecfr-client/dist/ecfr-client/browser"
+          app_location: "./ecfr-client/dist/ecfr-client/browser"
           api_location: ""
           output_location: ""
           skip_app_build: true
@@ -221,7 +218,6 @@ jobs:
           echo "Waiting for deployment to stabilize..."
           sleep 30
           
-          # Try health check multiple times
           max_attempts=5
           attempt=1
           while [ $attempt -le $max_attempts ]; do
