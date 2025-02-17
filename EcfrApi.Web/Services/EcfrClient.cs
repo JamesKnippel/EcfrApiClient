@@ -25,7 +25,6 @@ public class EcfrClient : IEcfrClient
     private readonly HttpClient _httpClient;
     private readonly ILogger<EcfrClient>? _logger;
     private readonly ITitleCacheService _cacheService;
-    private static readonly SemaphoreSlim _rateLimitSemaphore = new SemaphoreSlim(2);
     private const int RateLimitDelayMs = 100;
     private const string BaseUrl = "https://www.ecfr.gov";
 
@@ -218,19 +217,17 @@ public class EcfrClient : IEcfrClient
         }
         
         // Process titles in parallel with rate limiting
-        using var semaphore = new SemaphoreSlim(3); // Allow 3 concurrent requests
         var titleTasks = agencyTitles.Titles.Select(async title =>
         {
-            await semaphore.WaitAsync();
             try
             {
-                // Get weekly snapshots within the range
+                // Get monthly snapshots within the range
                 var issueDates = GetDateRangeList(startDate, endDate);
                 
                 // Get the latest issue date
                 if (!string.IsNullOrEmpty(title.LatestIssueDate))
                 {
-                    var latestDate = DateTimeOffset.Parse(title.LatestIssueDate);
+                    var latestDate = DateTimeOffset.Parse(title.LatestIssueDate).Date.ToUniversalTime();
                     issueDates = issueDates.Where(d => d <= latestDate).ToList();
                 }
 
@@ -247,20 +244,36 @@ public class EcfrClient : IEcfrClient
                     WordCounts = new List<WordCountSnapshot>()
                 };
 
-                WordCountSnapshot? lastSnapshot = null;
+                var previousWordCount = 0;
+                var previousDate = DateTimeOffset.MinValue;
+                
                 foreach (var issueDate in issueDates.OrderBy(d => d))
                 {
-                    try
+                    try 
                     {
-                        int wordCount;
+                        int wordCount = 0;
+                        bool needsFreshData = false;
+
                         // First check cache
-                        if (await _cacheService.IsCachedAsync(title.Number, issueDate))
+                        try 
                         {
-                            wordCount = await _cacheService.GetWordCountAsync(title.Number, issueDate);
+                            if (await _cacheService.IsCachedAsync(title.Number, issueDate))
+                            {
+                                wordCount = await _cacheService.GetWordCountAsync(title.Number, issueDate);
+                            }
+                            else
+                            {
+                                needsFreshData = true;
+                            }
                         }
-                        else
+                        catch (KeyNotFoundException)
                         {
-                            // Get from API and cache
+                            needsFreshData = true;
+                        }
+
+                        // Get from API and cache if needed
+                        if (needsFreshData)
+                        {
                             await Task.Delay(RateLimitDelayMs);
                             var xml = await GetTitleXmlForDateAsync(title.Number, issueDate);
                             wordCount = await CountWordsInXml(xml);
@@ -272,20 +285,18 @@ public class EcfrClient : IEcfrClient
                         var snapshot = new WordCountSnapshot
                         {
                             Date = issueDate,
-                            WordCount = wordCount
+                            WordCount = wordCount,
+                            DaysSinceLastSnapshot = previousDate == DateTimeOffset.MinValue ? 0 : (issueDate - previousDate).Days,
+                            WordsAddedSinceLastSnapshot = previousWordCount == 0 ? 0 : wordCount - previousWordCount,
                         };
                         
-                        if (lastSnapshot != null)
-                        {
-                            // Calculate rate metrics
-                            var daysSinceLastSnapshot = Math.Max(1, (int)(snapshot.Date - lastSnapshot.Date).TotalDays);
-                            snapshot.DaysSinceLastSnapshot = daysSinceLastSnapshot;
-                            snapshot.WordsAddedSinceLastSnapshot = snapshot.WordCount - lastSnapshot.WordCount;
-                            snapshot.WordsPerDay = (double)snapshot.WordsAddedSinceLastSnapshot / daysSinceLastSnapshot;
-                        }
-                        
+                        snapshot.WordsPerDay = snapshot.DaysSinceLastSnapshot == 0 ? 0 
+                            : (double)snapshot.WordsAddedSinceLastSnapshot / snapshot.DaysSinceLastSnapshot;
+
                         titleHistory.WordCounts.Add(snapshot);
-                        lastSnapshot = snapshot;
+                        
+                        previousWordCount = wordCount;
+                        previousDate = issueDate;
                     }
                     catch (Exception ex)
                     {
@@ -297,9 +308,10 @@ public class EcfrClient : IEcfrClient
                 // Only return history if we have at least one valid word count
                 return titleHistory.WordCounts.Any() ? titleHistory : null;
             }
-            finally
+            catch (Exception ex)
             {
-                semaphore.Release();
+                _logger?.LogError(ex, "Error getting word count history for title {TitleNumber}", title.Number);
+                return null;
             }
         });
 
@@ -316,18 +328,22 @@ public class EcfrClient : IEcfrClient
 
     private List<DateTimeOffset> GetDateRangeList(DateTimeOffset start, DateTimeOffset end)
     {
+        // Normalize dates to start of month to ensure consistent ranges
+        start = new DateTimeOffset(start.Year, start.Month, 1, 0, 0, 0, start.Offset).ToUniversalTime();
+        end = new DateTimeOffset(end.Year, end.Month, 1, 0, 0, 0, end.Offset).ToUniversalTime();
+        
         var dates = new List<DateTimeOffset>();
         var current = start;
         
-        // Get weekly snapshots
+        // Get monthly snapshots
         while (current <= end)
         {
             dates.Add(current);
-            current = current.AddDays(7); // Weekly intervals
+            current = current.AddMonths(1); // Monthly intervals
         }
         
-        // Always include the end date if it's not already included
-        if (!dates.Contains(end))
+        // Always include the end date if it's not already included and it's after the start of its month
+        if (!dates.Contains(end) && end.Day > 1)
         {
             dates.Add(end);
         }
@@ -397,19 +413,23 @@ public class EcfrClient : IEcfrClient
         {
             try
             {
+                // Add delay between retries
+                if (i > 0)
+                {
+                    var delay = Math.Pow(2, i) * RateLimitDelayMs; // Exponential backoff
+                    _logger?.LogInformation("Retrying request, waiting {Delay}ms before attempt {Attempt}", delay, i + 1);
+                    await Task.Delay((int)delay);
+                }
+                
                 return await action();
             }
-            catch (HttpRequestException ex) when (ex.Message.Contains("429"))
+            catch (Exception ex) when (i < maxRetries - 1)
             {
-                if (i == maxRetries - 1)
-                    throw;
-
-                var delay = TimeSpan.FromSeconds(Math.Pow(2, i)); // Exponential backoff: 1s, 2s, 4s
-                _logger?.LogWarning("Rate limited. Retrying in {Delay} seconds...", delay.TotalSeconds);
-                await Task.Delay(delay);
+                _logger?.LogWarning(ex, "Request failed, will retry");
             }
         }
-        throw new Exception("Should not reach here");
+
+        return await action(); // Final attempt
     }
 
     private async Task<HttpResponseMessage> GetWithRetryAsync(string url)
