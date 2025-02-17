@@ -74,11 +74,11 @@ jobs:
           cache-dependency-path: '${{ env.APP_LOCATION }}/package-lock.json'
 
       - name: Install Dependencies
-        working-directory: ${{ env.APP_LOCATION }}
+        working-directory: ./ecfr-client
         run: npm ci
 
       - name: Build
-        working-directory: ${{ env.APP_LOCATION }}
+        working-directory: ./ecfr-client
         run: npm run build -- --configuration production
 
       - name: Upload Build
@@ -87,6 +87,15 @@ jobs:
           name: app-build
           path: ${{ env.OUTPUT_LOCATION }}
           retention-days: 1
+      - name: Get Id Token
+        uses: actions/github-script@v6
+        id: idtoken
+        with:
+          script: |
+            const coredemo = require('@actions/core')
+            return await coredemo.getIDToken()
+          result-encoding: string
+
 
   deploy-staging:
     name: Deploy to Staging
@@ -113,9 +122,12 @@ jobs:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: "upload"
-          app_location: "${{ env.APP_LOCATION }}/dist/ecfr-client/browser"
+          app_location: "ecfr-client/dist/ecfr-client/browser"
+          api_location: ""
+          output_location: ""
           skip_app_build: true
           deployment_environment: staging
+          github_id_token: ${{ steps.idtoken.outputs.result }}
 
       - name: Verify Deployment
         run: |
@@ -176,9 +188,12 @@ jobs:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: "upload"
-          app_location: "${{ env.APP_LOCATION }}/dist/ecfr-client/browser"
+          app_location: "ecfr-client/dist/ecfr-client/browser"
+          api_location: ""
+          output_location: ""
           skip_app_build: true
           deployment_environment: production
+          github_id_token: ${{ steps.idtoken.outputs.result }}
 
       - name: Verify Deployment
         run: |
