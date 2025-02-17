@@ -81,6 +81,27 @@
               ],
               "outputHashing": "all"
             },
+            "staging": {
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "1mb",
+                  "maximumError": "2mb"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "2kb",
+                  "maximumError": "4kb"
+                }
+              ],
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.staging.ts"
+                }
+              ],
+              "outputHashing": "all"
+            },
             "development": {
               "optimization": false,
               "extractLicenses": false,
@@ -94,6 +115,9 @@
           "configurations": {
             "production": {
               "buildTarget": "ecfr-client:build:production"
+            },
+            "staging": {
+              "buildTarget": "ecfr-client:build:staging"
             },
             "development": {
               "buildTarget": "ecfr-client:build:development"
