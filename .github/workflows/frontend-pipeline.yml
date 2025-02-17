@@ -101,7 +101,7 @@ jobs:
       url: ${{ steps.deploy.outputs.url }}
     steps:
       - name: Download Build
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: app-build
           path: ${{ env.OUTPUT_LOCATION }}
@@ -142,7 +142,7 @@ jobs:
       url: ${{ steps.deploy.outputs.url }}
     steps:
       - name: Download Build
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: app-build
           path: ${{ env.OUTPUT_LOCATION }}
