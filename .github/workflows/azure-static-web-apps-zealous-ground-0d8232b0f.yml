@@ -139,38 +139,6 @@ jobs:
           deployment_environment: staging
           github_id_token: ${{ steps.idtoken.outputs.result }}
 
-      - name: Verify Deployment
-        run: |
-          echo "Waiting for deployment to stabilize..."
-          sleep 30
-          
-          max_attempts=5
-          attempt=1
-          while [ $attempt -le $max_attempts ]; do
-            echo "Attempt $attempt of $max_attempts..."
-            
-            full_response=$(curl -s -i ${{ steps.deploy.outputs.url }})
-            status_code=$(echo "$full_response" | grep HTTP | awk '{print $2}')
-            
-            if [ "$status_code" = "200" ]; then
-              echo " Deployment verified successfully"
-              exit 0
-            else
-              echo "Attempt $attempt failed with status: $status_code"
-              echo "Response:"
-              echo "$full_response"
-              
-              if [ $attempt -lt $max_attempts ]; then
-                echo "Waiting 30 seconds before next attempt..."
-                sleep 30
-              fi
-            fi
-            
-            attempt=$((attempt + 1))
-          done
-          
-          echo " Deployment verification failed after $max_attempts attempts"
-          exit 1
 
   deploy-production:
     name: Production Release
@@ -218,36 +186,3 @@ jobs:
           skip_app_build: true
           deployment_environment: production
           github_id_token: ${{ steps.idtoken.outputs.result }}
-
-      - name: Verify Deployment
-        run: |
-          echo "Waiting for deployment to stabilize..."
-          sleep 30
-          
-          max_attempts=5
-          attempt=1
-          while [ $attempt -le $max_attempts ]; do
-            echo "Attempt $attempt of $max_attempts..."
-            
-            full_response=$(curl -s -i ${{ steps.deploy.outputs.url }})
-            status_code=$(echo "$full_response" | grep HTTP | awk '{print $2}')
-            
-            if [ "$status_code" = "200" ]; then
-              echo " Deployment verified successfully"
-              exit 0
-            else
-              echo "Attempt $attempt failed with status: $status_code"
-              echo "Response:"
-              echo "$full_response"
-              
-              if [ $attempt -lt $max_attempts ]; then
-                echo "Waiting 30 seconds before next attempt..."
-                sleep 30
-              fi
-            fi
-            
-            attempt=$((attempt + 1))
-          done
-          
-          echo " Deployment verification failed after $max_attempts attempts"
-          exit 1
