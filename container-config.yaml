@@ -1,9 +1,9 @@
 containers:
   - name: client
-    image: ${REGISTRY_NAME}.azurecr.io/${CLIENT_IMAGE_NAME}:${GITHUB_SHA}
+    image: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.CLIENT_IMAGE_NAME }}:${{ github.sha }}
     resources:
-      cpu: 0.5
-      memory: 1Gi
+      cpu: 2
+      memory: 4Gi
     probes:
       - type: liveness
         httpGet:
@@ -17,15 +17,15 @@ containers:
       transport: http
 
   - name: api
-    image: ${REGISTRY_NAME}.azurecr.io/${API_IMAGE_NAME}:${GITHUB_SHA}
+    image: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.API_IMAGE_NAME }}:${{ github.sha }}
     env:
       - name: ASPNETCORE_ENVIRONMENT
         value: Production
       - name: ASPNETCORE_URLS
         value: http://+:80
     resources:
-      cpu: 0.5
-      memory: 1Gi
+      cpu: 2
+      memory: 4Gi
     probes:
       - type: liveness
         httpGet:

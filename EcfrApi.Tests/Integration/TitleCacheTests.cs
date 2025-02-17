@@ -59,7 +59,7 @@ public class TitleCacheTests : IDisposable
     public async Task GetWordCountHistory_ShouldCacheResults()
     {
         // Arrange
-        var endDate = DateTimeOffset.Parse("2025-02-10");
+        var endDate = DateTimeOffset.Parse("2025-02-01");  
         var startDate = endDate.AddYears(-1);
 
         // Act 1: First request should hit the API and cache results
@@ -105,17 +105,16 @@ public class TitleCacheTests : IDisposable
         var wordCount = 1000000;
         await _cacheService.UpdateTitleCacheAsync(36, targetDate, GenerateXmlWithWordCount(wordCount));
 
-        // Assert 1: Exact date match
+        // Assert 1: Exact date match should return the cached word count
         var exactMatch = await _cacheService.GetWordCountAsync(36, targetDate);
         exactMatch.Should().Be(wordCount, "Should return exact word count for matching date");
 
-        // Assert 2: Earlier date should use target date's count
-        var earlierMatch = await _cacheService.GetWordCountAsync(36, olderDate);
-        earlierMatch.Should().Be(0, "Should return 0 for dates before cached date");
-
-        // Assert 3: Later date should use target date's count
-        var laterMatch = await _cacheService.GetWordCountAsync(36, newerDate);
-        laterMatch.Should().Be(wordCount, "Should return cached word count for later dates");
+        // Assert 2: Non-exact dates should throw KeyNotFoundException
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => 
+            _cacheService.GetWordCountAsync(36, olderDate));
+        
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => 
+            _cacheService.GetWordCountAsync(36, newerDate));
     }
 
     private string GenerateXmlWithWordCount(int wordCount)

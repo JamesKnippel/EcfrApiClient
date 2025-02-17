@@ -37,20 +37,15 @@ public class TitleCacheService : ITitleCacheService
             .AsNoTracking()
             .ToListAsync();
 
-        // Try to find exact date match
+        // Only return exact date matches
         var exactMatch = entries.FirstOrDefault(t => t.Date.Date == targetDate);
         if (exactMatch != null)
         {
             return exactMatch.WordCount;
         }
 
-        // If no exact match, find closest previous date
-        var closestPrevious = entries
-            .Where(t => t.Date.Date <= targetDate)
-            .OrderByDescending(t => t.Date)
-            .FirstOrDefault();
-
-        return closestPrevious?.WordCount ?? 0;
+        // If no exact match, return null or throw exception to trigger fresh fetch
+        throw new KeyNotFoundException($"No cached word count found for title {titleNumber} on {targetDate:yyyy-MM-dd}");
     }
 
     public async Task UpdateTitleCacheAsync(int titleNumber, DateTimeOffset date, string xmlContent)
@@ -130,14 +125,8 @@ public class TitleCacheService : ITitleCacheService
             .AsNoTracking()
             .ToListAsync();
 
-        // Check for exact date match
-        if (entries.Any(t => t.Date.Date == targetDate))
-        {
-            return true;
-        }
-
-        // Check for any previous date
-        return entries.Any(t => t.Date.Date <= targetDate);
+        // Only consider exact date matches as cached
+        return entries.Any(t => t.Date.Date == targetDate);
     }
 
     private string ComputeChecksum(string content)
