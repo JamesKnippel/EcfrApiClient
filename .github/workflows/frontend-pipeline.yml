@@ -79,7 +79,7 @@ jobs:
 
       - name: Build
         working-directory: ${{ env.APP_LOCATION }}
-        run: npm run build -- --configuration ${{ github.event.inputs.environment || (github.ref == 'refs/heads/master' && 'production' || 'staging') }}
+        run: npm run build -- --configuration production
 
       - name: Upload Build
         uses: actions/upload-artifact@v4
@@ -94,7 +94,7 @@ jobs:
     if: |
       needs.build.result == 'success' && 
       (github.ref == 'refs/heads/develop' || 
-      github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging'))
     runs-on: ubuntu-latest
     environment:
       name: staging
@@ -131,9 +131,9 @@ jobs:
 
   deploy-production:
     name: Production Release
-    needs: deploy-staging
+    needs: build
     if: |
-      needs.deploy-staging.result == 'success' &&
+      needs.build.result == 'success' &&
       github.event_name == 'workflow_dispatch' &&
       github.event.inputs.environment == 'production'
     runs-on: ubuntu-latest
