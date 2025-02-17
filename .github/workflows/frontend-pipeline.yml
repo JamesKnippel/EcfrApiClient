@@ -87,15 +87,6 @@ jobs:
           name: app-build
           path: ${{ env.OUTPUT_LOCATION }}
           retention-days: 1
-      - name: Get Id Token
-        uses: actions/github-script@v6
-        id: idtoken
-        with:
-          script: |
-            const coredemo = require('@actions/core')
-            return await coredemo.getIDToken()
-          result-encoding: string
-
 
   deploy-staging:
     name: Deploy to Staging
@@ -105,6 +96,9 @@ jobs:
       (github.ref == 'refs/heads/develop' || 
       (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging'))
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     environment:
       name: staging
       url: ${{ steps.deploy.outputs.url }}
@@ -114,6 +108,18 @@ jobs:
         with:
           name: app-build
           path: ${{ env.OUTPUT_LOCATION }}
+
+      - name: Install OIDC Client
+        run: npm install @actions/core@1.6.0 @actions/http-client
+
+      - name: Get Id Token
+        uses: actions/github-script@v6
+        id: idtoken
+        with:
+          script: |
+            const core = require('@actions/core')
+            return await core.getIDToken()
+          result-encoding: string
 
       - name: Deploy to Staging
         id: deploy
@@ -171,6 +177,9 @@ jobs:
       github.event_name == 'workflow_dispatch' &&
       github.event.inputs.environment == 'production'
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     environment:
       name: production
       url: ${{ steps.deploy.outputs.url }}
@@ -180,6 +189,18 @@ jobs:
         with:
           name: app-build
           path: ${{ env.OUTPUT_LOCATION }}
+
+      - name: Install OIDC Client
+        run: npm install @actions/core@1.6.0 @actions/http-client
+
+      - name: Get Id Token
+        uses: actions/github-script@v6
+        id: idtoken
+        with:
+          script: |
+            const core = require('@actions/core')
+            return await core.getIDToken()
+          result-encoding: string
 
       - name: Deploy to Production
         id: deploy
