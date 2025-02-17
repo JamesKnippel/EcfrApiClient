@@ -32,6 +32,8 @@ env:
   APP_NAME: ecfr-app
   REGISTRY_NAME: ecfrregistry
   IMAGE_NAME: ecfr-api
+  API_IMAGE_NAME: ecfr-api
+  CLIENT_IMAGE_NAME: ecfr-client
 
 jobs:
   validate:

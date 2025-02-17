@@ -1,6 +1,6 @@
 containers:
   - name: api
-    image: ${REGISTRY_NAME}.azurecr.io/${API_IMAGE_NAME}:${GITHUB_SHA}
+    image: ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.API_IMAGE_NAME }}:${{ github.sha }}
     env:
       - name: ASPNETCORE_ENVIRONMENT
         value: Staging
@@ -9,8 +9,8 @@ containers:
       - name: ConnectionStrings__DefaultConnection
         secretRef: staging-connection-string
     resources:
-      cpu: 0.5
-      memory: 1Gi
+      cpu: 2
+      memory: 4Gi
     probes:
       - type: liveness
         httpGet:
